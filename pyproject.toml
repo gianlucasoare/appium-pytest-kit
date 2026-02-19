@@ -44,6 +44,7 @@ appium-pytest-kit = "appium_pytest_kit.pytest_plugin"
 Homepage = "https://github.com/gianlucasoare/appium-pytest-kit"
 Documentation = "https://github.com/gianlucasoare/appium-pytest-kit#readme"
 Repository = "https://github.com/gianlucasoare/appium-pytest-kit.git"
+Funding = "https://buymeacoffee.com/gianlucasoare"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

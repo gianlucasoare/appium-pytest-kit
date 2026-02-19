@@ -363,19 +363,23 @@ def test_wait_for_element(waiter):
     element = waiter.until(EC.element_to_be_clickable(locator), timeout=5.0)
 ```
 
-`Waiter` methods:
+`Waiter` methods — see [§21 Expanded waits](#21-expanded-waits) for the full reference and code examples.
 
 | Method | Description |
 |---|---|
-| `for_presence(locator, *, timeout)` | Wait for element to exist in the DOM |
-| `for_visibility(locator, *, timeout)` | Wait for element to be visible |
-| `for_clickable(locator, *, timeout)` | Wait for element to be tappable |
-| `for_invisibility(locator, *, timeout)` | Wait for element to disappear / be absent |
-| `for_text_contains(locator, text, *, timeout)` | Wait until element text contains a substring |
-| `for_text_equals(locator, text, *, timeout)` | Wait until element text exactly matches |
-| `for_all_visible(locators, *, timeout)` | Wait until every locator in the list is visible; returns list of elements |
-| `for_any_visible(locators, *, timeout)` | Wait until at least one locator is visible; returns first visible element |
-| `until(condition, *, timeout, message)` | Wait for any custom Selenium `expected_conditions` |
+| `for_presence` | Element exists in DOM |
+| `for_visibility` | Element is visible |
+| `for_clickable` | Element is tappable |
+| `for_invisibility` | Element is gone or hidden |
+| `for_text_contains` | Element text contains substring |
+| `for_text_equals` | Element text exactly matches |
+| `for_all_visible` | All locators visible |
+| `for_all_gone` | All locators invisible or absent |
+| `for_any_visible` | First visible locator |
+| `for_context_contains` | Driver context name contains substring |
+| `for_android_activity` | Android activity name contains string |
+| `for_android_toast` | Android toast message appeared |
+| `until` | Custom `expected_conditions` callable |
 
 All methods raise `WaitTimeoutError` on timeout. The error carries `.locator` and `.timeout` context fields.
 
@@ -400,19 +404,16 @@ def test_login_flow(actions):
     assert actions.text(welcome) == "Welcome, testuser"
 ```
 
-`MobileActions` methods:
+`MobileActions` methods — see [§22 Expanded actions](#22-expanded-actions) for the full reference and code examples.
 
-| Method | Signature | Description |
-|---|---|---|
-| `tap` | `(locator, *, timeout=10.0)` | Tap a visible element |
-| `type_text` | `(locator, value, *, clear_first=True, timeout=10.0)` | Clear (optional) and type into an element |
-| `text` | `(locator, *, timeout=10.0)` | Read and return the text content of an element |
-| `exists` | `(locator, *, timeout=2.0)` | Return `True` if the element appears within the timeout, `False` otherwise |
-| `tap_if_present` | `(locator, *, timeout=2.0)` | Tap if visible — returns `True` when tapped, `False` when absent |
-| `clear` | `(locator, *, timeout=10.0)` | Clear a text field |
-| `swipe` | `(start_x, start_y, end_x, end_y, *, duration_ms=800)` | W3C Pointer swipe gesture |
-| `scroll_down` | `(*, swipe_fraction=0.5)` | Scroll down (swipe up) on screen center |
-| `scroll_up` | `(*, swipe_fraction=0.5)` | Scroll up (swipe down) on screen center |
+| Group | Methods |
+|---|---|
+| Tap | `tap`, `tap_if_present`, `tap_if_present_first_available`, `tap_by_coordinates`, `tap_center`, `double_tap`, `long_press` |
+| Text input | `type_text`, `type_if_present`, `type_if_present_first_available`, `type_first_available`, `type_text_slowly`, `clear` |
+| Read | `text`, `attribute`, `exists` |
+| Scroll | `swipe`, `scroll_down`, `scroll_up`, `scroll_to_element` |
+| Keyboard | `hide_keyboard`, `press_keycode` |
+| WebView | `is_webview_available`, `switch_to_webview`, `switch_to_native` |
 
 All methods raise `ActionError` on Selenium failures (wrapping the underlying `WebDriverException`).
 
@@ -1211,40 +1212,68 @@ allure serve allure-results
 
 ## 21. Expanded waits
 
-The `Waiter` class provides fine-grained explicit waits for mobile UIs:
+### Complete method reference
+
+| Method | Returns | Description |
+|---|---|---|
+| `for_presence(locator, *, timeout)` | element | Element exists in DOM |
+| `for_visibility(locator, *, timeout)` | element | Element is visible |
+| `for_clickable(locator, *, timeout)` | element | Element is tappable |
+| `for_invisibility(locator, *, timeout)` | `bool` | Element is gone or hidden |
+| `for_text_contains(locator, text, *, timeout)` | `bool` | Element text contains substring |
+| `for_text_equals(locator, text, *, timeout)` | element | Element text exactly matches |
+| `for_all_visible(locators, *, timeout)` | `list` | All locators visible; returns list |
+| `for_all_gone(locators, *, timeout)` | `bool` | All locators invisible or absent |
+| `for_any_visible(locators, *, timeout)` | element | First visible locator; returns it |
+| `for_context_contains(substring, *, timeout)` | `str` | Driver context name contains substring |
+| `for_android_activity(partial_name, *, timeout)` | `str` | Android activity name contains string |
+| `for_android_toast(text_substring, *, timeout)` | `bool` | Android toast with text appeared |
+| `until(condition, *, timeout, message)` | any | Custom `expected_conditions` callable |
+
+All methods raise `WaitTimeoutError` on timeout.
+
+### Code examples
 
 ```python
 from appium.webdriver.common.appiumby import AppiumBy
 
-# Wait for element to be tappable
+# Element state waits
 el = waiter.for_clickable((AppiumBy.ID, "submit_btn"))
 el.click()
 
-# Wait for element to disappear (e.g. loading spinner)
-waiter.for_invisibility((AppiumBy.ACCESSIBILITY_ID, "loading"))
+waiter.for_invisibility((AppiumBy.ACCESSIBILITY_ID, "loading_spinner"))
 
-# Wait for text substring
-waiter.for_text_contains((AppiumBy.ID, "status_label"), "Success")
+# Text waits
+waiter.for_text_contains((AppiumBy.ID, "status"), "Success")
+waiter.for_text_equals((AppiumBy.ID, "result"), "42")
 
-# Wait for exact text match
-waiter.for_text_equals((AppiumBy.ID, "result"), "5")
-
-# Wait for all elements in a list
+# Collection waits
 els = waiter.for_all_visible([
     (AppiumBy.ID, "header"),
     (AppiumBy.ID, "content"),
 ])
 
-# Wait for the first element in a list to appear
+waiter.for_all_gone([
+    (AppiumBy.ID, "dialog"),
+    (AppiumBy.ID, "overlay"),
+])
+
 el = waiter.for_any_visible([
     (AppiumBy.ID, "error_dialog"),
     (AppiumBy.ID, "success_dialog"),
 ])
+
+# Platform / context waits
+ctx = waiter.for_context_contains("WEBVIEW")  # hybrid apps
+
+waiter.for_android_activity("MainActivity")   # Android
+
+waiter.for_android_toast("Saved", timeout=3.0)  # Android toast
 ```
 
 ### WaitTimeoutError context
 
-`WaitTimeoutError` now carries structured context:
+`WaitTimeoutError` carries structured context you can inspect in test failures:
 
 ```python
 from appium_pytest_kit.errors import WaitTimeoutError
@@ -1252,49 +1281,119 @@ from appium_pytest_kit.errors import WaitTimeoutError
 try:
     waiter.for_visibility(("id", "btn"), timeout=5.0)
 except WaitTimeoutError as exc:
-    print(exc.locator)   # ("id", "btn")
-    print(exc.timeout)   # 5.0
-    print(str(exc))      # "Element not visible: ('id', 'btn') (timeout=5.0s)"
+    print(exc.locator)  # ("id", "btn")
+    print(exc.timeout)  # 5.0
+    print(str(exc))     # "Element not visible: ('id', 'btn') (timeout=5.0s)"
 ```
 
 ---
 
 ## 22. Expanded actions
 
-### Conditional tap
+### Complete method reference
+
+**Tap / gesture**
+
+| Method | Returns | Description |
+|---|---|---|
+| `tap(locator, *, timeout=10)` | — | Tap a visible element |
+| `tap_if_present(locator, *, timeout=2)` | `bool` | Tap if visible; `False` on miss |
+| `tap_if_present_first_available(locators, *, timeout=2)` | `bool` | Tap first visible from list |
+| `tap_by_coordinates(x, y)` | — | Tap at screen pixel coordinates |
+| `tap_center(locator, *, timeout=10)` | — | Tap the visual center of element |
+| `double_tap(locator, *, timeout=10)` | — | Two quick taps |
+| `long_press(locator, *, duration_seconds=2, timeout=10)` | — | Hold-press gesture |
+
+**Text input**
+
+| Method | Returns | Description |
+|---|---|---|
+| `type_text(locator, value, *, clear_first=True, timeout=10)` | — | Clear + type |
+| `type_if_present(locator, value, *, timeout=3)` | `bool` | Type if visible; `False` on miss |
+| `type_if_present_first_available(locators, value, *, timeout=3)` | `bool` | Type into first visible from list |
+| `type_first_available(locators, value, *, timeout=10)` | `bool` | Type into first visible (raises on total fail) |
+| `type_text_slowly(locator, value, *, delay_per_char=0.1, timeout=10)` | — | Char-by-char with delay |
+| `clear(locator, *, timeout=10)` | — | Clear a text field |
+
+**Read / inspect**
+
+| Method | Returns | Description |
+|---|---|---|
+| `text(locator, *, timeout=10)` | `str` | Read element text |
+| `attribute(locator, attr, *, timeout=10)` | `str\|None` | Read element attribute |
+| `exists(locator, *, timeout=2)` | `bool` | Presence check |
+
+**Scroll / swipe**
+
+| Method | Returns | Description |
+|---|---|---|
+| `swipe(sx, sy, ex, ey, *, duration_ms=800)` | — | Raw W3C swipe gesture |
+| `scroll_down(*, swipe_fraction=0.5)` | — | Scroll down (swipe up on center) |
+| `scroll_up(*, swipe_fraction=0.5)` | — | Scroll up (swipe down on center) |
+| `scroll_to_element(locator, *, direction="down", max_swipes=10)` | — | Scroll until element visible |
+
+**Keyboard**
+
+| Method | Returns | Description |
+|---|---|---|
+| `hide_keyboard()` | — | Dismiss the on-screen keyboard |
+| `press_keycode(keycode)` | — | Android keycode (4=BACK, 66=ENTER, 67=BACKSPACE) |
+
+**Hybrid / WebView context**
+
+| Method | Returns | Description |
+|---|---|---|
+| `is_webview_available()` | `bool` | `True` if a WEBVIEW context exists |
+| `switch_to_webview()` | — | Switch driver to first WEBVIEW context |
+| `switch_to_native()` | — | Switch back to NATIVE_APP context |
+
+### Code examples
 
 ```python
-# Tap a cookie banner if it appears, otherwise continue
-dismissed = actions.tap_if_present(
-    (AppiumBy.ID, "cookie_accept"), timeout=3.0
-)
-```
+from appium.webdriver.common.appiumby import AppiumBy
 
-### Clear a field
+BY = AppiumBy.ACCESSIBILITY_ID
 
-```python
-actions.clear((AppiumBy.ID, "search_field"))
-```
+# Tap variants
+actions.tap((BY, "submit"))
+actions.tap_if_present((BY, "cookie_banner"), timeout=3.0)
+actions.tap_if_present_first_available([(BY, "ok"), (BY, "accept")])
+actions.tap_by_coordinates(200, 400)
+actions.tap_center((BY, "icon"))
+actions.double_tap((BY, "image"))
+actions.long_press((BY, "list_item"), duration_seconds=1.5)
 
-### Swipe and scroll
+# Text input
+actions.type_text((BY, "username"), "testuser")
+actions.type_if_present((BY, "search"), "query")
+actions.type_first_available([(BY, "email"), (BY, "phone")], "user@example.com")
+actions.type_text_slowly((BY, "otp"), "123456", delay_per_char=0.2)
+actions.clear((BY, "search_field"))
 
-```python
-# Raw swipe — coordinates are screen pixels
-actions.swipe(start_x=200, start_y=600, end_x=200, end_y=200)
+# Read
+label = actions.text((BY, "result_label"))
+hint = actions.attribute((BY, "search_field"), "hint")
 
-# Scroll down (reveals content below the fold)
+# Scroll / swipe
 actions.scroll_down()
-actions.scroll_down(swipe_fraction=0.7)   # larger swipe
+actions.scroll_down(swipe_fraction=0.7)
+actions.scroll_to_element((BY, "footer"), direction="down", max_swipes=15)
+actions.swipe(200, 600, 200, 200, duration_ms=500)
 
-# Scroll up
-actions.scroll_up()
+# Keyboard
+actions.hide_keyboard()
+actions.press_keycode(66)   # ENTER
+
+# Hybrid app
+if actions.is_webview_available():
+    actions.switch_to_webview()
+    # ... interact with web content ...
+    actions.switch_to_native()
 ```
-
-`scroll_down` / `scroll_up` compute the start/end from the screen dimensions automatically.
 
 ### ActionError context
 
-`ActionError` now carries the locator and action name:
+`ActionError` carries the action name and locator for easier debugging:
 
 ```python
 from appium_pytest_kit.errors import ActionError
@@ -1304,6 +1403,7 @@ try:
 except ActionError as exc:
     print(exc.action)   # "tap"
     print(exc.locator)  # ("id", "missing_btn")
+    print(str(exc))     # "[tap] Tap failed for locator: ('id', 'missing_btn') [id='missing_btn']"
 ```
 
 ---

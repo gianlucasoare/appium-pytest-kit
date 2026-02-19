@@ -1,5 +1,7 @@
 # appium-pytest-kit
 
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-yellow?logo=buymeacoffee)](https://buymeacoffee.com/gianlucasoare)
+
 `appium-pytest-kit` is a reusable Appium 2.x + pytest framework library for Python 3.11+.
 
 - `pip install appium-pytest-kit` (or install from GitHub — see below)
@@ -195,12 +197,23 @@ See [DOCUMENTATION.md § Configuration](./DOCUMENTATION.md#5-configuration) for 
 ## Expanded waits
 
 ```python
-waiter.for_clickable(locator)                     # wait for element to be tappable
-waiter.for_invisibility(locator)                  # wait for element to disappear
-waiter.for_text_contains(locator, "partial text") # wait for text substring
-waiter.for_text_equals(locator, "exact text")     # wait for exact text match
-waiter.for_all_visible([loc1, loc2, loc3])        # wait for all elements to appear
-waiter.for_any_visible([loc1, loc2])              # wait for first visible element
+# Element state
+waiter.for_clickable(locator)                          # wait for element to be tappable
+waiter.for_invisibility(locator)                       # wait for element to disappear
+
+# Text matching
+waiter.for_text_contains(locator, "partial text")      # wait for text substring
+waiter.for_text_equals(locator, "exact text")          # wait for exact text match
+
+# Collections
+waiter.for_all_visible([loc1, loc2, loc3])             # wait for all elements to appear
+waiter.for_all_gone([loc1, loc2])                      # wait for all elements to disappear
+waiter.for_any_visible([loc1, loc2])                   # wait for first visible element
+
+# Platform / context
+waiter.for_context_contains("WEBVIEW")                 # wait for hybrid app webview context
+waiter.for_android_activity("MainActivity")            # wait for Android activity
+waiter.for_android_toast("Saved successfully")         # wait for Android toast message
 ```
 
 ---
@@ -208,11 +221,38 @@ waiter.for_any_visible([loc1, loc2])              # wait for first visible eleme
 ## Expanded actions
 
 ```python
-actions.tap_if_present(locator)       # tap only if visible, returns bool
-actions.clear(locator)                # clear a text field
-actions.swipe(sx, sy, ex, ey)         # W3C Pointer swipe gesture
-actions.scroll_down()                 # swipe up on screen center
-actions.scroll_up()                   # swipe down on screen center
+# Tap variants
+actions.tap_if_present(locator)                  # tap if visible — returns bool
+actions.tap_if_present_first_available([l1, l2]) # tap first visible from list — returns bool
+actions.tap_by_coordinates(x, y)                 # tap at screen pixel coordinates
+actions.tap_center(locator)                      # tap the visual center of element
+actions.double_tap(locator)                      # two quick taps
+actions.long_press(locator, duration_seconds=2)  # hold press
+
+# Text input
+actions.type_if_present(locator, "text")                  # type if visible — returns bool
+actions.type_if_present_first_available([l1, l2], "text") # type into first visible — returns bool
+actions.type_first_available([l1, l2], "text")            # type into first visible (raises on fail)
+actions.type_text_slowly(locator, "text", delay_per_char=0.1)  # char-by-char typing
+actions.clear(locator)                                     # clear a text field
+
+# Read
+actions.attribute(locator, "content-desc")               # read element attribute
+
+# Scroll / swipe
+actions.swipe(sx, sy, ex, ey)                            # raw W3C swipe gesture
+actions.scroll_down()                                     # swipe up on screen center
+actions.scroll_up()                                       # swipe down on screen center
+actions.scroll_to_element(locator)                        # scroll until element visible
+
+# Keyboard
+actions.hide_keyboard()                                   # dismiss soft keyboard
+actions.press_keycode(66)                                 # Android keycode (66=ENTER, 4=BACK)
+
+# Hybrid / WebView
+actions.is_webview_available()                            # bool — WEBVIEW context exists
+actions.switch_to_webview()                               # switch to WEBVIEW context
+actions.switch_to_native()                                # switch back to NATIVE_APP
 ```
 
 ---
