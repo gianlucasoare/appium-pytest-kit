@@ -6,6 +6,15 @@
   <component name="ChangeListManager">
     <list default="true" id="4e46ece0-1b2d-490f-b52e-e3ae0d8f1cb4" name="Changes" comment="appium-pytest-kit v1">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/DOCUMENTATION.md" beforeDir="false" afterPath="$PROJECT_DIR$/DOCUMENTATION.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/appium_pytest_kit/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/appium_pytest_kit/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/appium_pytest_kit/actions.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/appium_pytest_kit/actions.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/appium_pytest_kit/cli.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/appium_pytest_kit/cli.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/appium_pytest_kit/errors.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/appium_pytest_kit/errors.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/appium_pytest_kit/pytest_plugin.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/appium_pytest_kit/pytest_plugin.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/appium_pytest_kit/settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/appium_pytest_kit/settings.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/appium_pytest_kit/waits.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/appium_pytest_kit/waits.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -41,7 +50,7 @@
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
     "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "main",
+    "git-widget-placeholder": "phase-2",
     "last_opened_file_path": "/Users/gianlucasoare/appium-pytest-kit"
   }
 }]]></component>
@@ -76,7 +85,15 @@
       <option name="project" value="LOCAL" />
       <updated>1771537858031</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="appium-pytest-kit v1">
+      <option name="closed" value="true" />
+      <created>1771538485715</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1771538485715</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">

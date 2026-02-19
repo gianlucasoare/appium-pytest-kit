@@ -4,7 +4,7 @@
 import json
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -47,6 +47,13 @@ class AppiumPytestKitSettings(BaseSettings):
     implicit_wait: float = 0.0
 
     capabilities_json: dict[str, Any] = Field(default_factory=dict)
+
+    session_mode: Literal["clean", "clean-session", "debug"] = "clean"
+    device_profile: str | None = None
+    devices_yaml: Path = Path("data/devices.yaml")
+    is_simulator: bool = False
+    video_policy: Literal["always", "failed", "never"] = "never"
+    artifacts_dir: Path = Path("artifacts")
 
     reporting_enabled: bool = False
     report_dir: Path = Path("artifacts/appium-pytest-kit")

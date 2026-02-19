@@ -7,8 +7,17 @@ import pytest
 from _pytest.config import Config
 from _pytest.stash import StashKey
 
+from appium_pytest_kit._internal.device_resolver import (
+    DeviceInfo,
+)
+from appium_pytest_kit._internal.diagnostics import (
+    attach_to_allure,
+    capture_page_source,
+    capture_screenshot,
+)
 from appium_pytest_kit._internal.reporting import SessionReportCollector
 from appium_pytest_kit._internal.server import AppiumServerInfo, AppiumServerManager
+from appium_pytest_kit._internal.video import ScreenRecorder
 from appium_pytest_kit.actions import MobileActions
 from appium_pytest_kit.driver import DriverConfig, build_driver_config, create_driver
 from appium_pytest_kit.hooks import AppiumPytestKitHookSpecs
@@ -17,6 +26,9 @@ from appium_pytest_kit.waits import Waiter
 
 SETTINGS_KEY: StashKey[AppiumPytestKitSettings] = StashKey()
 REPORTER_KEY: StashKey[SessionReportCollector | None] = StashKey()
+DRIVER_KEY: StashKey[Any] = StashKey()
+RECORDER_KEY: StashKey[ScreenRecorder | None] = StashKey()
+DEVICE_INFO_KEY: StashKey[DeviceInfo | None] = StashKey()
 
 
 def pytest_addhooks(pluginmanager: pytest.PytestPluginManager) -> None:
@@ -42,6 +54,11 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     group.addoption("--app-bundle-id", action="store", default=None)
     group.addoption("--app-capabilities-json", action="store", default=None)
     group.addoption("--app-implicit-wait", action="store", default=None)
+    group.addoption("--app-session-mode", action="store", default=None)
+    group.addoption("--app-device-profile", action="store", default=None)
+    group.addoption("--app-devices-yaml", action="store", default=None)
+    group.addoption("--app-video-policy", action="store", default=None)
+    group.addoption("--app-artifacts-dir", action="store", default=None)
 
     group.addoption(
         "--app-manage-appium-server",
@@ -66,6 +83,18 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         action="store_false",
         default=None,
         dest="app_reporting_enabled",
+    )
+    group.addoption(
+        "--app-is-simulator",
+        action="store_true",
+        default=None,
+        dest="app_is_simulator",
+    )
+    group.addoption(
+        "--no-app-is-simulator",
+        action="store_false",
+        default=None,
+        dest="app_is_simulator",
     )
 
     group.addoption(
@@ -102,6 +131,12 @@ def _collect_cli_overrides(config: Config) -> dict[str, Any]:
             "app_implicit_wait": config.getoption("app_implicit_wait"),
             "app_manage_appium_server": config.getoption("app_manage_appium_server"),
             "app_reporting_enabled": config.getoption("app_reporting_enabled"),
+            "app_session_mode": config.getoption("app_session_mode"),
+            "app_device_profile": config.getoption("app_device_profile"),
+            "app_devices_yaml": config.getoption("app_devices_yaml"),
+            "app_video_policy": config.getoption("app_video_policy"),
+            "app_artifacts_dir": config.getoption("app_artifacts_dir"),
+            "app_is_simulator": config.getoption("app_is_simulator"),
         }.items()
         if value is not None
     }
@@ -153,9 +188,36 @@ def appium_server(settings) -> AppiumServerInfo:
         manager.stop()
 
 
-@pytest.fixture
-def driver(settings, appium_server: AppiumServerInfo, request: pytest.FixtureRequest):
-    """Create and yield an Appium driver for each test function."""
+@pytest.fixture(scope="session")
+def _driver_shared(settings, appium_server: AppiumServerInfo, request: pytest.FixtureRequest):
+    """Session-scoped driver for clean-session and debug modes.
+
+    Yields None when session_mode is 'clean' so the function-scoped driver
+    fixture creates its own per-test driver.
+    """
+
+    if settings.session_mode == "clean":
+        yield None
+        return
+
+    config = _build_final_config(settings, appium_server, request)
+    created_driver = create_driver(config)
+    request.config.pluginmanager.hook.pytest_appium_pytest_kit_driver_created(
+        driver=created_driver,
+        settings=settings,
+    )
+    try:
+        yield created_driver
+    finally:
+        created_driver.quit()
+
+
+def _build_final_config(
+    settings: AppiumPytestKitSettings,
+    appium_server: AppiumServerInfo,
+    request: pytest.FixtureRequest,
+) -> DriverConfig:
+    """Merge base capabilities with hook extensions and return final config."""
 
     config = build_driver_config(settings, server_url=appium_server.url)
     capabilities = dict(config.capabilities)
@@ -167,17 +229,42 @@ def driver(settings, appium_server: AppiumServerInfo, request: pytest.FixtureReq
         if extension_caps:
             capabilities.update(dict(extension_caps))
 
-    final_config = DriverConfig(
+    return DriverConfig(
         server_url=config.server_url,
         capabilities=capabilities,
         implicit_wait=config.implicit_wait,
     )
 
+
+@pytest.fixture
+def driver(settings, appium_server: AppiumServerInfo, _driver_shared, request: pytest.FixtureRequest):  # noqa: E501
+    """Create and yield an Appium driver for each test function.
+
+    In 'clean' mode a fresh driver is created and quit per test.
+    In 'clean-session' and 'debug' modes the session-scoped driver is reused.
+    """
+
+    if settings.session_mode != "clean" and _driver_shared is not None:
+        # Reuse shared session driver
+        request.node.stash[DRIVER_KEY] = _driver_shared
+        yield _driver_shared
+        return
+
+    # Per-test driver (clean mode)
+    final_config = _build_final_config(settings, appium_server, request)
     created_driver = create_driver(final_config)
     request.config.pluginmanager.hook.pytest_appium_pytest_kit_driver_created(
         driver=created_driver,
         settings=settings,
     )
+
+    recorder: ScreenRecorder | None = None
+    if settings.video_policy in ("always", "failed"):
+        recorder = ScreenRecorder()
+        recorder.start(created_driver, settings)
+
+    request.node.stash[DRIVER_KEY] = created_driver
+    request.node.stash[RECORDER_KEY] = recorder
 
     try:
         yield created_driver
@@ -201,12 +288,46 @@ def actions(driver, waiter: Waiter) -> MobileActions:
 
 @pytest.hookimpl(wrapper=True)
 def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]):
-    """Collect call-phase report results when basic reporting is enabled."""
+    """Collect call-phase report results and capture failure artifacts."""
 
     report = yield
+
+    # Basic JSON reporting
     reporter = item.config.stash.get(REPORTER_KEY, None)
     if reporter is not None:
         reporter.record(report)
+
+    # Failure artifact capture (screenshot + page source) on call phase
+    if report.when == "call" and report.failed:
+        active_driver = item.stash.get(DRIVER_KEY, None)
+        settings: AppiumPytestKitSettings | None = item.config.stash.get(SETTINGS_KEY, None)
+
+        if active_driver is not None and settings is not None:
+            artifacts_dir = settings.artifacts_dir
+
+            screenshot_path = capture_screenshot(active_driver, item.nodeid, artifacts_dir)
+            pagesource_path = capture_page_source(active_driver, item.nodeid, artifacts_dir)
+
+            if screenshot_path and screenshot_path.exists():
+                attach_to_allure(screenshot_path, "Screenshot on failure", "image/png")
+            if pagesource_path and pagesource_path.exists():
+                attach_to_allure(pagesource_path, "Page source on failure", "text/xml")
+
+            # Stop video recording
+            recorder = item.stash.get(RECORDER_KEY, None)
+            if recorder is not None and settings.video_policy in ("always", "failed"):
+                recorder.stop_and_save(active_driver, item.nodeid, artifacts_dir, settings)
+
+    elif report.when == "call" and not report.failed:
+        # Stop and save video only when policy is 'always'
+        active_driver = item.stash.get(DRIVER_KEY, None)
+        settings = item.config.stash.get(SETTINGS_KEY, None)
+        recorder = item.stash.get(RECORDER_KEY, None)
+
+        if recorder is not None and settings is not None and settings.video_policy == "always":
+            if active_driver is not None:
+                recorder.stop_and_save(active_driver, item.nodeid, settings.artifacts_dir, settings)
+
     return report
 
 
