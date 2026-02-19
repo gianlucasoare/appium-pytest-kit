@@ -24,6 +24,7 @@ htmlcov/
 .DS_Store
 .idea/
 .vscode/
+.claude/
 
 # Runtime artifacts
 artifacts/
