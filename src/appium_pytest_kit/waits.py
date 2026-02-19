@@ -135,6 +135,108 @@ class Waiter:
 
         return [self.for_visibility(locator, timeout=timeout) for locator in locators]
 
+    def for_all_gone(
+        self,
+        locators: Locators,
+        *,
+        timeout: float | None = None,
+    ) -> bool:
+        """Wait until every locator in the list is invisible or absent."""
+
+        locators_list = list(locators)
+
+        def _all_gone(driver):
+            for locator in locators_list:
+                try:
+                    result = ec.invisibility_of_element_located(locator)(driver)
+                    if not result:
+                        return False
+                except Exception:
+                    pass
+            return True
+
+        return self.until(
+            _all_gone,
+            timeout=timeout,
+            message=f"Some elements still visible: {locators_list!r}",
+        )
+
+    def for_context_contains(
+        self,
+        substring: str,
+        *,
+        timeout: float | None = None,
+    ) -> str:
+        """Wait until a driver context name contains *substring* and return it.
+
+        Useful for hybrid apps waiting for a WEBVIEW context to become available.
+        """
+
+        def _cond(driver):
+            try:
+                for ctx in driver.contexts:
+                    if substring in ctx:
+                        return ctx
+            except Exception:
+                pass
+            return False
+
+        return self.until(
+            _cond,
+            timeout=timeout,
+            message=f"No context containing {substring!r} became available",
+        )
+
+    def for_android_activity(
+        self,
+        partial_name: str,
+        *,
+        timeout: float | None = None,
+    ) -> str:
+        """Wait until the current Android activity name contains *partial_name*.
+
+        Returns the full activity name. No-op / always-true on iOS.
+        """
+
+        def _cond(driver):
+            try:
+                activity = driver.current_activity or ""
+                return activity if partial_name in activity else False
+            except Exception:
+                return False
+
+        return self.until(
+            _cond,
+            timeout=timeout,
+            message=f"Activity containing {partial_name!r} did not appear",
+        )
+
+    def for_android_toast(
+        self,
+        text_substring: str,
+        *,
+        timeout: float = 5.0,
+    ) -> bool:
+        """Wait for an Android toast message containing *text_substring*.
+
+        Returns True when the toast appears. Toasts are transient — use a short timeout.
+        """
+
+        locator = ("xpath", f"//*[@text='{text_substring}']")
+
+        def _cond(driver):
+            try:
+                elements = driver.find_elements(*locator)
+                return bool(elements)
+            except Exception:
+                return False
+
+        return self.until(
+            _cond,
+            timeout=timeout,
+            message=f"Toast with text {text_substring!r} did not appear",
+        )
+
     def for_any_visible(self, locators: Locators, *, timeout: float | None = None):
         """Wait until any one of the locators is visible and return it."""
 
