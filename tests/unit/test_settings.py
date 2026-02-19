@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mobilkit.settings import apply_cli_overrides, load_settings
+from appium_pytest_kit.settings import apply_cli_overrides, load_settings
 
 
 def test_load_settings_from_env_file(tmp_path: Path) -> None:

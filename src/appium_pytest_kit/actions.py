@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from selenium.common.exceptions import WebDriverException
 
-from mobilkit.errors import ActionError
-from mobilkit.waits import Locator, Waiter
+from appium_pytest_kit.errors import ActionError
+from appium_pytest_kit.waits import Locator, Waiter
 
 
 class MobileActions:
@@ -59,6 +59,6 @@ class MobileActions:
 
         try:
             self._waiter.for_presence(locator, timeout=timeout)
-        except Exception:  # noqa: BLE001
+        except Exception:
             return False
         return True

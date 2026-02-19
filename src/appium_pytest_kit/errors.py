@@ -1,23 +1,23 @@
-"""Public exception hierarchy for mobilkit."""
+"""Public exception hierarchy for appium-pytest-kit."""
 
 from __future__ import annotations
 
 
-class MobilkitError(Exception):
+class AppiumPytestKitError(Exception):
     """Base exception for all framework-specific failures."""
 
 
-class ConfigurationError(MobilkitError):
+class ConfigurationError(AppiumPytestKitError):
     """Raised when framework configuration is invalid."""
 
 
-class WaitTimeoutError(MobilkitError):
+class WaitTimeoutError(AppiumPytestKitError):
     """Raised when an explicit wait condition does not pass in time."""
 
 
-class ActionError(MobilkitError):
+class ActionError(AppiumPytestKitError):
     """Raised when a high-level interaction action fails."""
 
 
-class DriverCreationError(MobilkitError):
+class DriverCreationError(AppiumPytestKitError):
     """Raised when an Appium session cannot be created."""

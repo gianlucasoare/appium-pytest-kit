@@ -1,4 +1,4 @@
-"""Pytest plugin that provides mobilkit fixtures and hooks."""
+"""Pytest plugin that provides appium-pytest-kit fixtures and hooks."""
 
 from __future__ import annotations
 
@@ -8,28 +8,28 @@ import pytest
 from _pytest.config import Config
 from _pytest.stash import StashKey
 
-from mobilkit.actions import MobileActions
-from mobilkit.driver import DriverConfig, build_driver_config, create_driver
-from mobilkit.hooks import MobilkitHookSpecs
-from mobilkit._internal.reporting import SessionReportCollector
-from mobilkit._internal.server import AppiumServerInfo, AppiumServerManager
-from mobilkit.settings import MobilkitSettings, apply_cli_overrides, load_settings
-from mobilkit.waits import Waiter
+from appium_pytest_kit._internal.reporting import SessionReportCollector
+from appium_pytest_kit._internal.server import AppiumServerInfo, AppiumServerManager
+from appium_pytest_kit.actions import MobileActions
+from appium_pytest_kit.driver import DriverConfig, build_driver_config, create_driver
+from appium_pytest_kit.hooks import AppiumPytestKitHookSpecs
+from appium_pytest_kit.settings import AppiumPytestKitSettings, apply_cli_overrides, load_settings
+from appium_pytest_kit.waits import Waiter
 
-SETTINGS_KEY: StashKey[MobilkitSettings] = StashKey()
+SETTINGS_KEY: StashKey[AppiumPytestKitSettings] = StashKey()
 REPORTER_KEY: StashKey[SessionReportCollector | None] = StashKey()
 
 
 def pytest_addhooks(pluginmanager: pytest.PytestPluginManager) -> None:
-    """Register mobilkit custom hook specifications."""
+    """Register appium-pytest-kit custom hook specifications."""
 
-    pluginmanager.add_hookspecs(MobilkitHookSpecs)
+    pluginmanager.add_hookspecs(AppiumPytestKitHookSpecs)
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     """Expose CLI overrides that take precedence over env settings."""
 
-    group = parser.getgroup("mobilkit")
+    group = parser.getgroup("appium-pytest-kit")
 
     group.addoption("--app-env-file", action="store", default=None)
     group.addoption("--app-platform", action="store", default=None)
@@ -87,23 +87,25 @@ def _parse_inline_override(raw: str) -> tuple[str, str]:
 
 
 def _collect_cli_overrides(config: Config) -> dict[str, Any]:
-    overrides: dict[str, Any] = {}
-    mapping = {
-        "app_platform": config.getoption("app_platform"),
-        "appium_url": config.getoption("appium_url"),
-        "app_device_name": config.getoption("app_device_name"),
-        "app_platform_version": config.getoption("app_platform_version"),
-        "app_udid": config.getoption("app_udid"),
-        "app_app": config.getoption("app_app"),
-        "app_app_package": config.getoption("app_app_package"),
-        "app_app_activity": config.getoption("app_app_activity"),
-        "app_bundle_id": config.getoption("app_bundle_id"),
-        "app_capabilities_json": config.getoption("app_capabilities_json"),
-        "app_implicit_wait": config.getoption("app_implicit_wait"),
-        "app_manage_appium_server": config.getoption("app_manage_appium_server"),
-        "app_reporting_enabled": config.getoption("app_reporting_enabled"),
+    overrides: dict[str, Any] = {
+        key: value
+        for key, value in {
+            "app_platform": config.getoption("app_platform"),
+            "appium_url": config.getoption("appium_url"),
+            "app_device_name": config.getoption("app_device_name"),
+            "app_platform_version": config.getoption("app_platform_version"),
+            "app_udid": config.getoption("app_udid"),
+            "app_app": config.getoption("app_app"),
+            "app_app_package": config.getoption("app_app_package"),
+            "app_app_activity": config.getoption("app_app_activity"),
+            "app_bundle_id": config.getoption("app_bundle_id"),
+            "app_capabilities_json": config.getoption("app_capabilities_json"),
+            "app_implicit_wait": config.getoption("app_implicit_wait"),
+            "app_manage_appium_server": config.getoption("app_manage_appium_server"),
+            "app_reporting_enabled": config.getoption("app_reporting_enabled"),
+        }.items()
+        if value is not None
     }
-    overrides.update({key: value for key, value in mapping.items() if value is not None})
 
     for raw_override in config.getoption("app_override"):
         key, value = _parse_inline_override(raw_override)
@@ -119,7 +121,7 @@ def pytest_configure(config: Config) -> None:
     settings = load_settings(env_file=env_file)
     settings = apply_cli_overrides(settings, _collect_cli_overrides(config))
 
-    maybe_replacement = config.pluginmanager.hook.pytest_mobilkit_configure_settings(
+    maybe_replacement = config.pluginmanager.hook.pytest_appium_pytest_kit_configure_settings(
         settings=settings
     )
     if maybe_replacement is not None:
@@ -134,8 +136,8 @@ def pytest_configure(config: Config) -> None:
 
 
 @pytest.fixture(scope="session")
-def settings(pytestconfig: Config) -> MobilkitSettings:
-    """Resolved mobilkit settings fixture."""
+def settings(pytestconfig: Config) -> AppiumPytestKitSettings:
+    """Resolved appium-pytest-kit settings fixture."""
 
     return pytestconfig.stash[SETTINGS_KEY]
 
@@ -159,7 +161,7 @@ def driver(settings, appium_server: AppiumServerInfo, request: pytest.FixtureReq
     config = build_driver_config(settings, server_url=appium_server.url)
     capabilities = dict(config.capabilities)
 
-    for extension_caps in request.config.pluginmanager.hook.pytest_mobilkit_capabilities(
+    for extension_caps in request.config.pluginmanager.hook.pytest_appium_pytest_kit_capabilities(
         capabilities=capabilities,
         settings=settings,
     ):
@@ -173,7 +175,7 @@ def driver(settings, appium_server: AppiumServerInfo, request: pytest.FixtureReq
     )
 
     created_driver = create_driver(final_config)
-    request.config.pluginmanager.hook.pytest_mobilkit_driver_created(
+    request.config.pluginmanager.hook.pytest_appium_pytest_kit_driver_created(
         driver=created_driver,
         settings=settings,
     )
@@ -198,22 +200,20 @@ def actions(driver, waiter: Waiter) -> MobileActions:
     return MobileActions(driver=driver, waiter=waiter)
 
 
-@pytest.hookimpl(hookwrapper=True)
+@pytest.hookimpl(wrapper=True)
 def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]):
     """Collect call-phase report results when basic reporting is enabled."""
 
-    _ = call
-    outcome = yield
-    report = outcome.get_result()
+    report = yield
     reporter = item.config.stash.get(REPORTER_KEY, None)
     if reporter is not None:
         reporter.record(report)
+    return report
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     """Flush optional report output at end of session."""
 
-    _ = exitstatus
     reporter = session.config.stash.get(REPORTER_KEY, None)
     if reporter is not None:
         reporter.flush()

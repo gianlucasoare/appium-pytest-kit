@@ -1,137 +1,203 @@
-# mobilkit
+# appium-pytest-kit
 
-`mobilkit` is a reusable Appium 2.x + pytest framework library for Python 3.11+.
+`appium-pytest-kit` is a reusable Appium 2.x + pytest framework library for Python 3.11+.
 
-Goals:
-- `pip install mobilkit`
-- `mobilkit-init` to bootstrap configuration
-- write tests immediately with built-in fixtures and zero boilerplate setup
+- `pip install appium-pytest-kit` (or install from GitHub — see below)
+- `appium-pytest-kit-init` to bootstrap configuration
+- Write tests immediately with built-in fixtures and zero boilerplate
+
+**Full documentation:** [DOCUMENTATION.md](./DOCUMENTATION.md)
+
+---
+
+## Installation
+
+### From PyPI (once published)
+
+```bash
+pip install appium-pytest-kit
+```
+
+### From GitHub
+
+```bash
+# latest main branch
+pip install git+https://github.com/gianlucasoare/appium-pytest-kit.git
+
+# specific branch
+pip install git+https://github.com/gianlucasoare/appium-pytest-kit.git@main
+
+# specific tag
+pip install git+https://github.com/gianlucasoare/appium-pytest-kit.git@v0.1.0
+```
+
+### Local clone (editable, for development)
+
+```bash
+git clone https://github.com/gianlucasoare/appium-pytest-kit.git
+cd appium-pytest-kit
+pip install -e ".[dev]"
+```
+
+---
 
 ## Quickstart
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install mobilkit
-mobilkit-init
+pip install git+https://github.com/gianlucasoare/appium-pytest-kit.git
+appium-pytest-kit-init        # creates .env with starter config
 pytest -q
 ```
 
-Minimal test:
+Edit `.env` with your device and app details, then write tests.
 
-```python
-# test_smoke.py
-def test_settings_fixture_is_available(settings):
-    assert settings.platform in {"android", "ios"}
+---
+
+## Step-by-step: test a real app in 5 minutes
+
+This example tests the Android Calculator on an emulator. See [DOCUMENTATION.md](./DOCUMENTATION.md) for the full iOS walkthrough and all options.
+
+### 1. Start Appium and an emulator
+
+```bash
+appium &
+emulator -avd Pixel_7_API_33 &
+adb devices    # confirm emulator-5554 is listed
 ```
 
-Integration test with Appium driver fixture:
+### 2. Configure `.env`
+
+```env
+APP_PLATFORM=android
+APP_APPIUM_URL=http://127.0.0.1:4723
+APP_DEVICE_NAME=emulator-5554
+APP_PLATFORM_VERSION=13
+APP_APP_PACKAGE=com.google.android.calculator
+APP_APP_ACTIVITY=com.android.calculator2.Calculator
+APP_NO_RESET=true
+```
+
+### 3. Write a test
 
 ```python
+# tests/test_calculator.py
 import pytest
+from appium.webdriver.common.appiumby import AppiumBy
+
+BTN_2      = (AppiumBy.ACCESSIBILITY_ID, "2")
+BTN_PLUS   = (AppiumBy.ACCESSIBILITY_ID, "plus")
+BTN_3      = (AppiumBy.ACCESSIBILITY_ID, "3")
+BTN_EQUALS = (AppiumBy.ACCESSIBILITY_ID, "equals")
+RESULT     = (AppiumBy.RESOURCE_ID, "com.google.android.calculator:id/result_final")
+
 
 @pytest.mark.integration
-def test_session(driver):
-    assert driver.session_id is not None
+def test_addition(actions):
+    actions.tap(BTN_2)
+    actions.tap(BTN_PLUS)
+    actions.tap(BTN_3)
+    actions.tap(BTN_EQUALS)
+    assert actions.text(RESULT) == "5"
 ```
+
+### 4. Run it
+
+```bash
+pytest -m integration -v
+```
+
+---
 
 ## Built-in fixtures
 
-- `settings`: resolved `MobilkitSettings` object
-- `appium_server`: resolved server descriptor (`url`, `managed`) with optional lifecycle management
-- `driver`: function-scoped Appium driver
-- `waiter`: reusable explicit wait utility
-- `actions`: reusable generic action helper
+| Fixture | Scope | Description |
+|---|---|---|
+| `settings` | session | Resolved `AppiumPytestKitSettings` — access any config field |
+| `appium_server` | session | Server URL and whether it is framework-managed |
+| `driver` | function | Live `appium.webdriver.Remote`, quit automatically after each test |
+| `waiter` | function | Explicit waits with `WaitTimeoutError` on timeout |
+| `actions` | function | `tap`, `type_text`, `text`, `exists` — high-level UI helpers |
 
-## Configuration model
+---
 
-`mobilkit` uses `pydantic-settings` with `APP_` prefix.
+## Configuration
 
-Precedence (low -> high):
-1. Defaults in `MobilkitSettings`
-2. `.env` / environment variables
-3. pytest CLI overrides (`--app-*` / `--app-override KEY=VALUE`)
-
-### Common settings
-
-| `.env` key | Type | Default | CLI override |
-|---|---|---|---|
-| `APP_PLATFORM` | `android|ios` | `android` | `--app-platform` |
-| `APP_APPIUM_URL` | `str` | `http://127.0.0.1:4723` | `--appium-url` |
-| `APP_MANAGE_APPIUM_SERVER` | `bool` | `false` | `--app-manage-appium-server` |
-| `APP_DEVICE_NAME` | `str?` | `None` | `--app-device-name` |
-| `APP_PLATFORM_VERSION` | `str?` | `None` | `--app-platform-version` |
-| `APP_UDID` | `str?` | `None` | `--app-udid` |
-| `APP_APP` | `str?` | `None` | `--app-app` |
-| `APP_APP_PACKAGE` | `str?` | `None` | `--app-app-package` |
-| `APP_APP_ACTIVITY` | `str?` | `None` | `--app-app-activity` |
-| `APP_BUNDLE_ID` | `str?` | `None` | `--app-bundle-id` |
-| `APP_CAPABILITIES_JSON` | JSON object | `{}` | `--app-capabilities-json` |
-| `APP_REPORTING_ENABLED` | `bool` | `false` | `--app-reporting-enabled` |
-
-### Starter `.env`
-
-Create with:
+Settings are loaded from `.env` → environment variables → CLI flags (highest wins).
 
 ```bash
-mobilkit-init
+pytest --app-platform ios
+pytest --app-device-name "Pixel 7" --app-platform-version 13
+pytest --appium-url http://192.168.1.10:4723
+pytest --app-app-package com.example.app --app-app-activity .MainActivity
+pytest --app-capabilities-json '{"autoGrantPermissions": true}'
+pytest --app-manage-appium-server    # start Appium automatically
+pytest --app-reporting-enabled       # write artifacts/appium-pytest-kit/summary.json
 ```
 
-## Extension guide
+See [DOCUMENTATION.md § Configuration](./DOCUMENTATION.md#5-configuration) for the full settings table.
 
-`mobilkit` is intentionally small and generic. Extend it from your project/plugin:
+---
 
-### 1) Custom fixtures
+## Extension hooks
 
-Define project fixtures in your own `conftest.py` and compose with `driver`, `waiter`, or `actions`.
-
-### 2) Capability customization
-
-Implement custom hook:
+Implement these in your `conftest.py` to customise behaviour without touching the framework:
 
 ```python
-def pytest_mobilkit_capabilities(capabilities, settings):
-    return {"locale": "en_US"}
-```
+# conftest.py
 
-### 3) Settings customization
+def pytest_appium_pytest_kit_capabilities(capabilities, settings):
+    """Add extra capabilities before each driver session."""
+    return {"autoGrantPermissions": True, "language": "en"}
 
-Implement hook:
 
-```python
-def pytest_mobilkit_configure_settings(settings):
+def pytest_appium_pytest_kit_configure_settings(settings):
+    """Replace settings at session start."""
     return settings.model_copy(update={"implicit_wait": 2.0})
-```
 
-### 4) Driver lifecycle observation
 
-Implement hook:
-
-```python
-def pytest_mobilkit_driver_created(driver, settings):
+def pytest_appium_pytest_kit_driver_created(driver, settings):
+    """Run setup immediately after each driver is created."""
     driver.orientation = "PORTRAIT"
 ```
 
-### 5) Custom waits/actions
-
-Compose your own wrappers around `Waiter` and `MobileActions` instead of inheriting framework internals.
-
-### 6) Platform adapters
-
-Use `CapabilitiesAdapter` implementations and pass them into `build_driver_config(...)` in custom factories.
+---
 
 ## Public API vs internals
 
-Stable public modules:
-- `mobilkit.settings`
-- `mobilkit.driver`
-- `mobilkit.waits`
-- `mobilkit.actions`
-- `mobilkit.errors`
-- `mobilkit.interfaces`
+Top-level imports (stable):
+
+```python
+from appium_pytest_kit import (
+    AppiumPytestKitSettings,
+    AppiumPytestKitError,
+    ConfigurationError,
+    WaitTimeoutError,
+    ActionError,
+    DriverCreationError,
+    DriverConfig,
+    MobileActions,
+    Waiter,
+    build_driver_config,
+    create_driver,
+    load_settings,
+    apply_cli_overrides,
+)
+```
+
+Stable public modules (direct import):
+- `appium_pytest_kit.settings`
+- `appium_pytest_kit.driver`
+- `appium_pytest_kit.waits`
+- `appium_pytest_kit.actions`
+- `appium_pytest_kit.errors`
+- `appium_pytest_kit.interfaces` — `CapabilitiesAdapter` protocol for custom adapters
 
 Private/internal modules (no compatibility guarantee):
-- `mobilkit._internal.*`
+- `appium_pytest_kit._internal.*`
+
+---
 
 ## Fixture lifecycle
 
@@ -153,9 +219,7 @@ flowchart TD
     M --> N["optional server stop"]
 ```
 
-## Example project
-
-See `/Users/gianlucasoare/mobilkit/examples/basic` for a minimal first test and integration test sample.
+---
 
 ## Local development
 
@@ -165,6 +229,8 @@ ruff check .
 pytest -q
 pytest --collect-only examples/basic/tests -q
 ```
+
+---
 
 ## V2 roadmap hooks (not implemented in v1)
 

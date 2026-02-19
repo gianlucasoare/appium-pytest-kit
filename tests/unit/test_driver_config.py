@@ -1,17 +1,18 @@
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
-from mobilkit.driver import build_driver_config
-from mobilkit.interfaces import CapabilitiesAdapter
-from mobilkit.settings import MobilkitSettings
+from appium_pytest_kit.driver import build_driver_config
+from appium_pytest_kit.interfaces import CapabilitiesAdapter
+from appium_pytest_kit.settings import AppiumPytestKitSettings
 
 
 class LocaleCapabilitiesAdapter(CapabilitiesAdapter):
     def adapt(
         self,
         capabilities: Mapping[str, Any],
-        settings: MobilkitSettings,
+        settings: AppiumPytestKitSettings,
     ) -> Mapping[str, Any]:
         _ = settings
         payload = dict(capabilities)
@@ -20,7 +21,7 @@ class LocaleCapabilitiesAdapter(CapabilitiesAdapter):
 
 
 def test_build_driver_config_android_defaults() -> None:
-    settings = MobilkitSettings(
+    settings = AppiumPytestKitSettings(
         platform="android",
         app_package="com.example.app",
         app_activity=".MainActivity",
@@ -36,7 +37,7 @@ def test_build_driver_config_android_defaults() -> None:
 
 
 def test_build_driver_config_ios_with_adapter() -> None:
-    settings = MobilkitSettings(
+    settings = AppiumPytestKitSettings(
         platform="ios",
         bundle_id="com.example.ios",
         capabilities_json={"autoAcceptAlerts": True},

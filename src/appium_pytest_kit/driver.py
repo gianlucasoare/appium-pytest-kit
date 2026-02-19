@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any
 
 from appium import webdriver
 from appium.options.common import AppiumOptions
 
-from mobilkit.errors import DriverCreationError
-from mobilkit.interfaces import CapabilitiesAdapter
-from mobilkit.settings import MobilkitSettings
+from appium_pytest_kit.errors import DriverCreationError
+from appium_pytest_kit.interfaces import CapabilitiesAdapter
+from appium_pytest_kit.settings import AppiumPytestKitSettings
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,7 +27,7 @@ def _default_automation_name(platform: str) -> str:
     return "UiAutomator2" if platform == "android" else "XCUITest"
 
 
-def _base_capabilities(settings: MobilkitSettings) -> dict[str, Any]:
+def _base_capabilities(settings: AppiumPytestKitSettings) -> dict[str, Any]:
     caps: dict[str, Any] = {
         "platformName": settings.platform,
         "automationName": settings.automation_name
@@ -58,7 +59,7 @@ def _base_capabilities(settings: MobilkitSettings) -> dict[str, Any]:
 
 
 def build_driver_config(
-    settings: MobilkitSettings,
+    settings: AppiumPytestKitSettings,
     *,
     server_url: str | None = None,
     adapters: Iterable[CapabilitiesAdapter] = (),

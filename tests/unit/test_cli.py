@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mobilkit.cli import ENV_TEMPLATE, init_env_file, main
+from appium_pytest_kit.cli import ENV_TEMPLATE, init_env_file, main
 
 
 def test_init_env_file_creates_template(tmp_path: Path) -> None:

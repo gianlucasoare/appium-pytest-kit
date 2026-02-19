@@ -1,12 +1,13 @@
-"""Extension contracts for customizing mobilkit behavior."""
+"""Extension contracts for customizing appium-pytest-kit behavior."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Mapping, Protocol, runtime_checkable
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from mobilkit.driver import DriverConfig
-    from mobilkit.settings import MobilkitSettings
+    from appium_pytest_kit.driver import DriverConfig
+    from appium_pytest_kit.settings import AppiumPytestKitSettings
 
 
 @runtime_checkable
@@ -16,7 +17,7 @@ class CapabilitiesAdapter(Protocol):
     def adapt(
         self,
         capabilities: Mapping[str, Any],
-        settings: "MobilkitSettings",
+        settings: AppiumPytestKitSettings,
     ) -> Mapping[str, Any]:
         """Return a new mapping containing adapted capabilities."""
 
@@ -25,5 +26,5 @@ class CapabilitiesAdapter(Protocol):
 class DriverFactory(Protocol):
     """Contract for creating a concrete driver from a driver config."""
 
-    def __call__(self, config: "DriverConfig") -> Any:
+    def __call__(self, config: DriverConfig) -> Any:
         """Instantiate and return a driver client."""

@@ -1,16 +1,17 @@
-"""Configuration loading and merge rules for mobilkit."""
+"""Configuration loading and merge rules for appium-pytest-kit."""
 
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class MobilkitSettings(BaseSettings):
+class AppiumPytestKitSettings(BaseSettings):
     """Framework settings loaded from defaults and environment."""
 
     model_config = SettingsConfigDict(
@@ -49,7 +50,7 @@ class MobilkitSettings(BaseSettings):
     capabilities_json: dict[str, Any] = Field(default_factory=dict)
 
     reporting_enabled: bool = False
-    report_dir: Path = Path("artifacts/mobilkit")
+    report_dir: Path = Path("artifacts/appium-pytest-kit")
 
     @field_validator("platform")
     @classmethod
@@ -95,17 +96,15 @@ class MobilkitSettings(BaseSettings):
         raise TypeError(msg)
 
 
-def load_settings(*, env_file: str | Path | None = None) -> MobilkitSettings:
+def load_settings(*, env_file: str | Path | None = None) -> AppiumPytestKitSettings:
     """Load framework settings from defaults + .env + env vars."""
 
     if env_file is None:
-        return MobilkitSettings()
-    return MobilkitSettings(_env_file=env_file)
+        return AppiumPytestKitSettings()
+    return AppiumPytestKitSettings(_env_file=env_file)
 
 
-def normalize_setting_name(name: str) -> str:
-    """Normalize CLI/env-like setting names into model field names."""
-
+def _normalize_setting_name(name: str) -> str:
     normalized = name.strip().lower().replace("-", "_")
     if normalized.startswith("app_"):
         normalized = normalized.removeprefix("app_")
@@ -113,14 +112,14 @@ def normalize_setting_name(name: str) -> str:
 
 
 def apply_cli_overrides(
-    settings: MobilkitSettings,
+    settings: AppiumPytestKitSettings,
     overrides: Mapping[str, Any],
-) -> MobilkitSettings:
+) -> AppiumPytestKitSettings:
     """Apply highest-precedence CLI overrides on top of loaded settings."""
 
     merged = settings.model_dump(mode="python")
     for raw_key, raw_value in overrides.items():
         if raw_value is None:
             continue
-        merged[normalize_setting_name(raw_key)] = raw_value
-    return MobilkitSettings.model_validate(merged)
+        merged[_normalize_setting_name(raw_key)] = raw_value
+    return AppiumPytestKitSettings.model_validate(merged)

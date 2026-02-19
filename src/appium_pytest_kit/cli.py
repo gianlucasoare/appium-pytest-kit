@@ -1,12 +1,12 @@
-"""Command-line utilities for mobilkit."""
+"""Command-line utilities for appium-pytest-kit."""
 
 from __future__ import annotations
 
 import argparse
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
-ENV_TEMPLATE = """# mobilkit starter configuration
+ENV_TEMPLATE = """# appium-pytest-kit starter configuration
 # Copy this file to your project root and adjust values.
 
 APP_PLATFORM=android
@@ -23,9 +23,9 @@ APP_REPORTING_ENABLED=false
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Build CLI parser for `mobilkit-init`."""
+    """Build CLI parser for `appium-pytest-kit-init`."""
 
-    parser = argparse.ArgumentParser(description="Create a starter .env for mobilkit")
+    parser = argparse.ArgumentParser(description="Create a starter .env for appium-pytest-kit")
     parser.add_argument(
         "--path",
         default=".env",
@@ -50,7 +50,7 @@ def init_env_file(path: Path, *, force: bool = False) -> bool:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """CLI entry point used by `mobilkit-init`."""
+    """CLI entry point used by `appium-pytest-kit-init`."""
 
     parser = build_parser()
     args = parser.parse_args(argv)

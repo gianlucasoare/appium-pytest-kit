@@ -3,13 +3,13 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mobilkit"
+name = "appium-pytest-kit"
 version = "0.1.0"
 description = "Reusable Appium 2.x + pytest mobile test framework"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "mobilkit contributors" }]
+authors = [{ name = "appium-pytest-kit contributors" }]
 keywords = ["appium", "pytest", "mobile", "automation", "framework"]
 classifiers = [
   "Development Status :: 3 - Alpha",
@@ -34,15 +34,15 @@ dev = [
 ]
 
 [project.scripts]
-mobilkit-init = "mobilkit.cli:main"
+appium-pytest-kit-init = "appium_pytest_kit.cli:main"
 
 [project.entry-points.pytest11]
-mobilkit = "mobilkit.pytest_plugin"
+appium-pytest-kit = "appium_pytest_kit.pytest_plugin"
 
 [project.urls]
-Homepage = "https://example.com/mobilkit"
-Documentation = "https://example.com/mobilkit/docs"
-Repository = "https://example.com/mobilkit/repo"
+Homepage = "https://github.com/gianlucasoare/appium-pytest-kit"
+Documentation = "https://github.com/gianlucasoare/appium-pytest-kit#readme"
+Repository = "https://github.com/gianlucasoare/appium-pytest-kit.git"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -51,7 +51,7 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-mobilkit = ["py.typed"]
+appium_pytest_kit = ["py.typed"]
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers"

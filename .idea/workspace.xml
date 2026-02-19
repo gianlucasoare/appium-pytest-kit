@@ -5,7 +5,29 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="4e46ece0-1b2d-490f-b52e-e3ae0d8f1cb4" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/basic/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/examples/basic/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/basic/tests/test_first_mobilkit.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mobilkit/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mobilkit/_internal/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mobilkit/_internal/reporting.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mobilkit/_internal/server.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mobilkit/_version.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mobilkit/actions.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mobilkit/cli.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mobilkit/driver.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mobilkit/errors.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mobilkit/hooks.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mobilkit/interfaces.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mobilkit/py.typed" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mobilkit/pytest_plugin.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mobilkit/settings.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/mobilkit/waits.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/test_cli.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/test_cli.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/test_driver_config.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/test_driver_config.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/unit/test_settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/unit/test_settings.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -15,6 +37,18 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
+  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
+  "lastFilter": {
+    "state": "OPEN",
+    "assignee": "gianlucasoare"
+  }
+}]]></component>
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/gianlucasoare/appium-pytest-kit.git",
+    "accountId": "80e3c031-7d0f-44c7-9a53-0809a28225a6"
+  }
+}]]></component>
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 0
 }</component>
@@ -29,7 +63,8 @@
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
     "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "main"
+    "git-widget-placeholder": "main",
+    "last_opened_file_path": "/Users/gianlucasoare/appium-pytest-kit"
   }
 }]]></component>
   <component name="SharedIndexes">

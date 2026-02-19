@@ -1,8 +1,8 @@
-# mobilkit basic example
+# appium-pytest-kit basic example
 
 ## Run
 
-1. `pip install mobilkit`
+1. `pip install appium-pytest-kit`
 2. `cp .env.example .env`
 3. `pytest -q`
 

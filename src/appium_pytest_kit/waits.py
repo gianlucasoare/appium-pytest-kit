@@ -9,7 +9,7 @@ from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 
-from mobilkit.errors import WaitTimeoutError
+from appium_pytest_kit.errors import WaitTimeoutError
 
 ConditionResult = TypeVar("ConditionResult")
 Locator = tuple[str, str]

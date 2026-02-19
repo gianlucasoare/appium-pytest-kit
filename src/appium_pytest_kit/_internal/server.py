@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from mobilkit.errors import ConfigurationError
-from mobilkit.settings import MobilkitSettings
+from appium_pytest_kit.errors import ConfigurationError
+from appium_pytest_kit.settings import AppiumPytestKitSettings
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,7 +19,7 @@ class AppiumServerInfo:
 class AppiumServerManager:
     """Starts/stops a local Appium server when enabled by settings."""
 
-    def __init__(self, settings: MobilkitSettings) -> None:
+    def __init__(self, settings: AppiumPytestKitSettings) -> None:
         self._settings = settings
         self._service = None
 
