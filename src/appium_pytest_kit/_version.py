@@ -1,6 +1,5 @@
 """Package version metadata."""
 
-from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version
 

@@ -1,6 +1,5 @@
 """Generic explicit wait primitives for mobile UI interactions."""
 
-from __future__ import annotations
 
 from collections.abc import Callable
 from typing import TypeVar

@@ -1,6 +1,5 @@
 """Command-line utilities for appium-pytest-kit."""
 
-from __future__ import annotations
 
 import argparse
 from collections.abc import Sequence

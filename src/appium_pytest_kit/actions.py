@@ -1,6 +1,5 @@
 """Reusable high-level UI actions composed with wait utilities."""
 
-from __future__ import annotations
 
 from selenium.common.exceptions import WebDriverException
 

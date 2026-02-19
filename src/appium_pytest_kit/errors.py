@@ -1,6 +1,5 @@
 """Public exception hierarchy for appium-pytest-kit."""
 
-from __future__ import annotations
 
 
 class AppiumPytestKitError(Exception):
