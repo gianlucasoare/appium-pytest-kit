@@ -19,6 +19,13 @@
 15. [Error hierarchy](#15-error-hierarchy)
 16. [Project structure](#16-project-structure)
 17. [Troubleshooting](#17-troubleshooting)
+18. [Session modes](#18-session-modes)
+19. [Device resolution](#19-device-resolution)
+20. [Failure diagnostics and video](#20-failure-diagnostics-and-video)
+21. [Expanded waits](#21-expanded-waits)
+22. [Expanded actions](#22-expanded-actions)
+23. [Project scaffolding CLI](#23-project-scaffolding-cli)
+24. [Migration notes](#24-migration-notes)
 
 ---
 
@@ -212,6 +219,12 @@ Higher-precedence values always win. This lets you keep safe defaults in `.env` 
 | `APP_CAPABILITIES_JSON` | `capabilities_json` | JSON object | `{}` | Extra capabilities merged last |
 | `APP_REPORTING_ENABLED` | `reporting_enabled` | `bool` | `false` | Write JSON summary to `report_dir` |
 | `APP_REPORT_DIR` | `report_dir` | `str` | `artifacts/appium-pytest-kit` | Directory for report output |
+| `APP_SESSION_MODE` | `session_mode` | `clean\|clean-session\|debug` | `clean` | Driver lifecycle mode |
+| `APP_DEVICE_PROFILE` | `device_profile` | `str\|None` | `None` | Named device profile in `devices.yaml` |
+| `APP_DEVICES_YAML` | `devices_yaml` | `str` | `data/devices.yaml` | Path to the device profiles YAML file |
+| `APP_IS_SIMULATOR` | `is_simulator` | `bool` | `false` | Marks the target as an iOS simulator |
+| `APP_VIDEO_POLICY` | `video_policy` | `always\|failed\|never` | `never` | When to record and save screen video |
+| `APP_ARTIFACTS_DIR` | `artifacts_dir` | `str` | `artifacts` | Root directory for screenshots, videos, page source |
 
 ### 5.3 CLI overrides
 
@@ -356,9 +369,15 @@ def test_wait_for_element(waiter):
 |---|---|
 | `for_presence(locator, *, timeout)` | Wait for element to exist in the DOM |
 | `for_visibility(locator, *, timeout)` | Wait for element to be visible |
+| `for_clickable(locator, *, timeout)` | Wait for element to be tappable |
+| `for_invisibility(locator, *, timeout)` | Wait for element to disappear / be absent |
+| `for_text_contains(locator, text, *, timeout)` | Wait until element text contains a substring |
+| `for_text_equals(locator, text, *, timeout)` | Wait until element text exactly matches |
+| `for_all_visible(locators, *, timeout)` | Wait until every locator in the list is visible; returns list of elements |
+| `for_any_visible(locators, *, timeout)` | Wait until at least one locator is visible; returns first visible element |
 | `until(condition, *, timeout, message)` | Wait for any custom Selenium `expected_conditions` |
 
-All methods raise `WaitTimeoutError` on timeout.
+All methods raise `WaitTimeoutError` on timeout. The error carries `.locator` and `.timeout` context fields.
 
 ### `actions` — function scope
 
@@ -389,6 +408,11 @@ def test_login_flow(actions):
 | `type_text` | `(locator, value, *, clear_first=True, timeout=10.0)` | Clear (optional) and type into an element |
 | `text` | `(locator, *, timeout=10.0)` | Read and return the text content of an element |
 | `exists` | `(locator, *, timeout=2.0)` | Return `True` if the element appears within the timeout, `False` otherwise |
+| `tap_if_present` | `(locator, *, timeout=2.0)` | Tap if visible — returns `True` when tapped, `False` when absent |
+| `clear` | `(locator, *, timeout=10.0)` | Clear a text field |
+| `swipe` | `(start_x, start_y, end_x, end_y, *, duration_ms=800)` | W3C Pointer swipe gesture |
+| `scroll_down` | `(*, swipe_fraction=0.5)` | Scroll down (swipe up) on screen center |
+| `scroll_up` | `(*, swipe_fraction=0.5)` | Scroll up (swipe down) on screen center |
 
 All methods raise `ActionError` on Selenium failures (wrapping the underlying `WebDriverException`).
 
@@ -1033,3 +1057,319 @@ src/appium_pytest_kit/
 - Verify `APP_UDID` matches the CI emulator: `adb devices` in the CI step
 - Add `--app-reporting-enabled` to get a JSON summary artifact
 - Pin emulator API level to avoid version drift between `APP_PLATFORM_VERSION` and the running emulator
+
+---
+
+## 18. Session modes
+
+Control how the Appium driver is created and destroyed:
+
+| Mode | Driver lifecycle | Use case |
+|---|---|---|
+| `clean` | Fresh driver per test, quit after each | Default, maximum isolation |
+| `clean-session` | Shared driver for the whole session | Faster run, reduced overhead |
+| `debug` | Shared driver, `noReset=true` applied | Local debugging, keep app state |
+
+Configure via `.env` or CLI:
+
+```env
+APP_SESSION_MODE=clean-session
+```
+
+```bash
+pytest --app-session-mode debug
+```
+
+**clean-session vs debug**
+- `clean-session` — same driver, but the app is reset between tests (controlled by `APP_NO_RESET`)
+- `debug` — same driver, app is never reset; useful when you want to inspect the state after a failure
+
+> In `clean-session` and `debug` modes, the driver is not quit between tests. Calling `driver.quit()` manually in a test will break subsequent tests — avoid it.
+
+---
+
+## 19. Device resolution
+
+The framework resolves the target device through three tiers in priority order:
+
+### Tier 1 — Explicit settings
+
+Set `APP_DEVICE_NAME` and/or `APP_UDID` in `.env` or via CLI:
+
+```env
+APP_DEVICE_NAME=Pixel 7
+APP_UDID=emulator-5554
+APP_PLATFORM_VERSION=14
+```
+
+### Tier 2 — Named device profile
+
+Define reusable device profiles in `data/devices.yaml`:
+
+```yaml
+# data/devices.yaml
+devices:
+  pixel7:
+    device_name: "Pixel 7"
+    platform: android
+    udid: "emulator-5554"
+    platform_version: "14"
+    automation_name: UiAutomator2
+    is_simulator: false
+
+  iphone15_sim:
+    device_name: "iPhone 15 Pro"
+    platform: ios
+    platform_version: "17.4"
+    automation_name: XCUITest
+    is_simulator: true
+```
+
+Select a profile:
+
+```bash
+pytest --app-device-profile pixel7
+```
+
+Or in `.env`:
+
+```env
+APP_DEVICE_PROFILE=pixel7
+APP_DEVICES_YAML=data/devices.yaml
+```
+
+> Requires `PyYAML`: `pip install PyYAML`
+
+### Tier 3 — Auto-detect
+
+When no device name or profile is provided, the framework auto-detects:
+
+- **Android**: runs `adb devices -l` and selects the first connected device
+- **iOS real device**: runs `xcrun xctrace list devices`
+- **iOS Simulator**: runs `xcrun simctl list devices --json` and picks a booted simulator
+
+Auto-detection is best-effort and silent (returns `None` if no device is found).
+
+### Launch validation
+
+When a driver is created, the framework validates that the minimum required app settings are present:
+
+- **Android**: `APP_APP` or (`APP_APP_PACKAGE` + `APP_APP_ACTIVITY`)
+- **iOS**: `APP_APP` or `APP_BUNDLE_ID`
+
+If neither is provided, `LaunchValidationError` is raised before any connection attempt.
+
+---
+
+## 20. Failure diagnostics and video
+
+### Screenshots and page source
+
+On test failure the framework automatically captures:
+
+- `artifacts/screenshots/<test_id>.png`
+- `artifacts/pagesource/<test_id>.xml`
+
+The capture is best-effort — if the driver is already in a bad state, the file is silently skipped.
+
+Configure the root directory:
+
+```env
+APP_ARTIFACTS_DIR=artifacts
+```
+
+### Video recording
+
+```env
+APP_VIDEO_POLICY=never    # default — no recording
+APP_VIDEO_POLICY=failed   # record every test; keep only on failure
+APP_VIDEO_POLICY=always   # record every test; always save
+```
+
+Video files are saved to `artifacts/videos/<test_id>.mp4`.
+
+> iOS Simulator recording via Appium is not supported and is skipped automatically when `APP_IS_SIMULATOR=true`.
+
+### Allure integration
+
+Install `allure-pytest`:
+
+```bash
+pip install allure-pytest
+```
+
+No configuration required — when allure-pytest is present the framework automatically attaches screenshots and page source to Allure reports. If `allure-pytest` is not installed the behaviour is unchanged (no error).
+
+Run with Allure:
+
+```bash
+pytest --alluredir=allure-results
+allure serve allure-results
+```
+
+---
+
+## 21. Expanded waits
+
+The `Waiter` class provides fine-grained explicit waits for mobile UIs:
+
+```python
+from appium.webdriver.common.appiumby import AppiumBy
+
+# Wait for element to be tappable
+el = waiter.for_clickable((AppiumBy.ID, "submit_btn"))
+el.click()
+
+# Wait for element to disappear (e.g. loading spinner)
+waiter.for_invisibility((AppiumBy.ACCESSIBILITY_ID, "loading"))
+
+# Wait for text substring
+waiter.for_text_contains((AppiumBy.ID, "status_label"), "Success")
+
+# Wait for exact text match
+waiter.for_text_equals((AppiumBy.ID, "result"), "5")
+
+# Wait for all elements in a list
+els = waiter.for_all_visible([
+    (AppiumBy.ID, "header"),
+    (AppiumBy.ID, "content"),
+])
+
+# Wait for the first element in a list to appear
+el = waiter.for_any_visible([
+    (AppiumBy.ID, "error_dialog"),
+    (AppiumBy.ID, "success_dialog"),
+])
+```
+
+### WaitTimeoutError context
+
+`WaitTimeoutError` now carries structured context:
+
+```python
+from appium_pytest_kit.errors import WaitTimeoutError
+
+try:
+    waiter.for_visibility(("id", "btn"), timeout=5.0)
+except WaitTimeoutError as exc:
+    print(exc.locator)   # ("id", "btn")
+    print(exc.timeout)   # 5.0
+    print(str(exc))      # "Element not visible: ('id', 'btn') (timeout=5.0s)"
+```
+
+---
+
+## 22. Expanded actions
+
+### Conditional tap
+
+```python
+# Tap a cookie banner if it appears, otherwise continue
+dismissed = actions.tap_if_present(
+    (AppiumBy.ID, "cookie_accept"), timeout=3.0
+)
+```
+
+### Clear a field
+
+```python
+actions.clear((AppiumBy.ID, "search_field"))
+```
+
+### Swipe and scroll
+
+```python
+# Raw swipe — coordinates are screen pixels
+actions.swipe(start_x=200, start_y=600, end_x=200, end_y=200)
+
+# Scroll down (reveals content below the fold)
+actions.scroll_down()
+actions.scroll_down(swipe_fraction=0.7)   # larger swipe
+
+# Scroll up
+actions.scroll_up()
+```
+
+`scroll_down` / `scroll_up` compute the start/end from the screen dimensions automatically.
+
+### ActionError context
+
+`ActionError` now carries the locator and action name:
+
+```python
+from appium_pytest_kit.errors import ActionError
+
+try:
+    actions.tap(("id", "missing_btn"))
+except ActionError as exc:
+    print(exc.action)   # "tap"
+    print(exc.locator)  # ("id", "missing_btn")
+```
+
+---
+
+## 23. Project scaffolding CLI
+
+Generate a full project skeleton in one command:
+
+```bash
+appium-pytest-kit-init --framework --root my-project
+```
+
+This creates:
+
+```
+my-project/
+├── data/
+│   └── devices.yaml           # device profiles (pixel7, iphone15, iphone15_sim)
+├── pages/
+│   ├── __init__.py
+│   ├── base_page.py            # BasePage(driver, waiter, actions) base class
+│   └── example_page.py         # starter page object to copy and adapt
+├── flows/
+│   └── __init__.py             # reusable multi-step UI flows
+├── tests/
+│   ├── android/
+│   │   └── test_smoke.py       # Android smoke test template
+│   └── ios/
+│       └── test_smoke.py       # iOS smoke test template
+├── conftest.py                 # session fixtures and hook implementations
+├── pytest.ini                  # markers: smoke, regression, android, ios
+├── .env.example                # all settings documented
+└── .gitignore
+```
+
+Existing files are never overwritten (unless `--force` is passed).
+
+After scaffolding:
+
+1. Copy `.env.example` to `.env` and fill in your device details
+2. Rename `example_page.py` to match your app's first screen
+3. Replace placeholder locators with real ones from Appium Inspector
+4. Run: `pytest tests/android/test_smoke.py -m smoke -v`
+
+---
+
+## 24. Migration notes
+
+### Migrating from pre-Phase-2 (v0.1.x)
+
+All existing tests continue to work without changes.
+
+**New defaults (no action required):**
+- `session_mode` defaults to `clean` — identical to previous behaviour
+- `video_policy` defaults to `never` — no recording unless opted in
+- `artifacts_dir` defaults to `artifacts` — failure screenshots are now auto-captured there
+
+**New error context (non-breaking):**
+- `WaitTimeoutError` and `ActionError` now have `.locator`, `.timeout`, and `.action` fields
+- `str(exc)` is richer but the class hierarchy is unchanged
+
+**New `AppiumPytestKitSettings` fields:**
+All new fields have safe defaults. If you use `model_copy(update={...})` in hooks, no changes needed. If you construct `AppiumPytestKitSettings` directly in tests, the new fields are optional.
+
+**New error classes:**
+`DeviceResolutionError` and `LaunchValidationError` are new subclasses of `AppiumPytestKitError`. Existing broad `except AppiumPytestKitError` blocks will still catch them.
+
+**`WaitTimeoutError` constructor change:**
+The constructor now accepts keyword-only `locator=` and `timeout=` arguments. If you raise `WaitTimeoutError("msg")` directly in custom code it still works unchanged.

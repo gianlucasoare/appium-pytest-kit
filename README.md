@@ -3,7 +3,7 @@
 `appium-pytest-kit` is a reusable Appium 2.x + pytest framework library for Python 3.11+.
 
 - `pip install appium-pytest-kit` (or install from GitHub — see below)
-- `appium-pytest-kit-init` to bootstrap configuration
+- `appium-pytest-kit-init` to bootstrap configuration, or `--framework` to scaffold a full project
 - Write tests immediately with built-in fixtures and zero boilerplate
 
 **Full documentation:** [DOCUMENTATION.md](./DOCUMENTATION.md)
@@ -47,7 +47,9 @@ pip install -e ".[dev]"
 python -m venv .venv
 source .venv/bin/activate
 pip install git+https://github.com/gianlucasoare/appium-pytest-kit.git
-appium-pytest-kit-init        # creates .env with starter config
+appium-pytest-kit-init          # creates .env with starter config
+# or scaffold a full project:
+appium-pytest-kit-init --framework --root my-project
 pytest -q
 ```
 
@@ -118,7 +120,53 @@ pytest -m integration -v
 | `appium_server` | session | Server URL and whether it is framework-managed |
 | `driver` | function | Live `appium.webdriver.Remote`, quit automatically after each test |
 | `waiter` | function | Explicit waits with `WaitTimeoutError` on timeout |
-| `actions` | function | `tap`, `type_text`, `text`, `exists` — high-level UI helpers |
+| `actions` | function | High-level UI helpers: `tap`, `type_text`, `text`, `exists`, `swipe`, and more |
+
+---
+
+## Session modes
+
+Control driver lifecycle per test or across the whole session:
+
+```env
+APP_SESSION_MODE=clean          # default: fresh driver per test
+APP_SESSION_MODE=clean-session  # shared driver, app reset between tests
+APP_SESSION_MODE=debug          # shared driver, no reset (fast local debugging)
+```
+
+---
+
+## Device resolution (3-tier priority)
+
+1. **Explicit** — `APP_DEVICE_NAME` / `APP_UDID` set in `.env` or CLI
+2. **Profile** — `APP_DEVICE_PROFILE=pixel7` resolved from `data/devices.yaml`
+3. **Auto-detect** — `adb devices` (Android) or `xcrun simctl` / `xctrace` (iOS)
+
+```bash
+# Use a named profile from data/devices.yaml
+pytest --app-device-profile pixel7
+
+# Auto-detect (no device settings needed)
+pytest
+```
+
+---
+
+## Failure diagnostics
+
+On test failure the framework automatically captures:
+- **Screenshot** → `artifacts/screenshots/<test_id>.png`
+- **Page source** → `artifacts/pagesource/<test_id>.xml`
+- **Video** (if policy allows) → `artifacts/videos/<test_id>.mp4`
+
+```env
+APP_VIDEO_POLICY=never    # default
+APP_VIDEO_POLICY=failed   # record and save only on failure
+APP_VIDEO_POLICY=always   # record every test
+APP_ARTIFACTS_DIR=artifacts
+```
+
+Allure attachments are added automatically when `allure-pytest` is installed.
 
 ---
 
@@ -131,12 +179,41 @@ pytest --app-platform ios
 pytest --app-device-name "Pixel 7" --app-platform-version 13
 pytest --appium-url http://192.168.1.10:4723
 pytest --app-app-package com.example.app --app-app-activity .MainActivity
+pytest --app-session-mode clean-session
+pytest --app-device-profile pixel7
+pytest --app-video-policy failed
+pytest --app-is-simulator
 pytest --app-capabilities-json '{"autoGrantPermissions": true}'
 pytest --app-manage-appium-server    # start Appium automatically
 pytest --app-reporting-enabled       # write artifacts/appium-pytest-kit/summary.json
 ```
 
 See [DOCUMENTATION.md § Configuration](./DOCUMENTATION.md#5-configuration) for the full settings table.
+
+---
+
+## Expanded waits
+
+```python
+waiter.for_clickable(locator)                     # wait for element to be tappable
+waiter.for_invisibility(locator)                  # wait for element to disappear
+waiter.for_text_contains(locator, "partial text") # wait for text substring
+waiter.for_text_equals(locator, "exact text")     # wait for exact text match
+waiter.for_all_visible([loc1, loc2, loc3])        # wait for all elements to appear
+waiter.for_any_visible([loc1, loc2])              # wait for first visible element
+```
+
+---
+
+## Expanded actions
+
+```python
+actions.tap_if_present(locator)       # tap only if visible, returns bool
+actions.clear(locator)                # clear a text field
+actions.swipe(sx, sy, ex, ey)         # W3C Pointer swipe gesture
+actions.scroll_down()                 # swipe up on screen center
+actions.scroll_up()                   # swipe down on screen center
+```
 
 ---
 
@@ -164,7 +241,33 @@ def pytest_appium_pytest_kit_driver_created(driver, settings):
 
 ---
 
-## Public API vs internals
+## Project scaffolding
+
+Generate a full project structure in one command:
+
+```bash
+appium-pytest-kit-init --framework --root my-project
+```
+
+Creates:
+```
+my-project/
+├── data/devices.yaml          # device profiles
+├── pages/
+│   ├── base_page.py           # BasePage composition class
+│   └── example_page.py        # starter page object
+├── flows/                     # reusable multi-step flows
+├── tests/
+│   ├── android/test_smoke.py
+│   └── ios/test_smoke.py
+├── conftest.py
+├── pytest.ini
+└── .env.example
+```
+
+---
+
+## Public API
 
 Top-level imports (stable):
 
@@ -173,9 +276,12 @@ from appium_pytest_kit import (
     AppiumPytestKitSettings,
     AppiumPytestKitError,
     ConfigurationError,
+    DeviceResolutionError,
+    LaunchValidationError,
     WaitTimeoutError,
     ActionError,
     DriverCreationError,
+    DeviceInfo,
     DriverConfig,
     MobileActions,
     Waiter,
@@ -211,12 +317,19 @@ flowchart TD
     E -->|"false"| G["use APP_APPIUM_URL"]
     F --> H["appium_server fixture"]
     G --> H
-    H --> I["driver fixture (per test)"]
-    I --> J["waiter/actions fixtures"]
-    I --> K["test executes"]
-    K --> L["driver.quit()"]
-    L --> M["optional report summary flush"]
-    M --> N["optional server stop"]
+    H --> I{"session_mode"}
+    I -->|"clean-session / debug"| J["_driver_shared (session)"]
+    I -->|"clean"| K["driver per test"]
+    J --> K
+    K --> L["waiter / actions fixtures"]
+    K --> M["test executes"]
+    M --> N{"failed?"}
+    N -->|"yes"| O["capture screenshot + page source"]
+    N --> P["video stop (per policy)"]
+    O --> P
+    P --> Q["driver.quit() if clean mode"]
+    Q --> R["optional report summary flush"]
+    R --> S["optional server stop"]
 ```
 
 ---
@@ -229,12 +342,3 @@ ruff check .
 pytest -q
 pytest --collect-only examples/basic/tests -q
 ```
-
----
-
-## V2 roadmap hooks (not implemented in v1)
-
-- richer reporting adapters (Allure, JUnit augmentation)
-- pluggable driver pool/session reuse strategies
-- packaged platform adapter registry
-- optional page-object scaffolding generator

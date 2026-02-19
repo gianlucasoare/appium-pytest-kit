@@ -1,7 +1,7 @@
 """Generic explicit wait primitives for mobile UI interactions."""
 
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import TypeVar
 
 from selenium.common.exceptions import TimeoutException
@@ -12,6 +12,7 @@ from appium_pytest_kit.errors import WaitTimeoutError
 
 ConditionResult = TypeVar("ConditionResult")
 Locator = tuple[str, str]
+Locators = Iterable[Locator]
 
 
 class Waiter:
@@ -37,15 +38,19 @@ class Waiter:
     ) -> ConditionResult:
         """Wait until a custom condition is truthy and return its value."""
 
+        effective_timeout = timeout or self._default_timeout
         wait = WebDriverWait(
             self._driver,
-            timeout or self._default_timeout,
+            effective_timeout,
             poll_frequency=self._poll_frequency,
         )
         try:
             return wait.until(condition, message)
         except TimeoutException as exc:
-            raise WaitTimeoutError(message or "Explicit wait timed out") from exc
+            raise WaitTimeoutError(
+                message or "Explicit wait timed out",
+                timeout=effective_timeout,
+            ) from exc
 
     def for_presence(self, locator: Locator, *, timeout: float | None = None):
         """Wait for element presence and return it."""
@@ -63,4 +68,90 @@ class Waiter:
             ec.visibility_of_element_located(locator),
             timeout=timeout,
             message=f"Element not visible: {locator}",
+        )
+
+    def for_clickable(self, locator: Locator, *, timeout: float | None = None):
+        """Wait for element to be clickable and return it."""
+
+        return self.until(
+            ec.element_to_be_clickable(locator),
+            timeout=timeout,
+            message=f"Element not clickable: {locator}",
+        )
+
+    def for_invisibility(self, locator: Locator, *, timeout: float | None = None) -> bool:
+        """Wait for element to be invisible (or absent) and return True."""
+
+        return self.until(
+            ec.invisibility_of_element_located(locator),
+            timeout=timeout,
+            message=f"Element still visible: {locator}",
+        )
+
+    def for_text_contains(
+        self,
+        locator: Locator,
+        text: str,
+        *,
+        timeout: float | None = None,
+    ):
+        """Wait until element text contains substring, return True."""
+
+        return self.until(
+            ec.text_to_be_present_in_element(locator, text),
+            timeout=timeout,
+            message=f"Text {text!r} not found in element: {locator}",
+        )
+
+    def for_text_equals(
+        self,
+        locator: Locator,
+        text: str,
+        *,
+        timeout: float | None = None,
+    ):
+        """Wait until element text exactly matches, return element."""
+
+        def _exact_match(driver):
+            try:
+                el = driver.find_element(*locator)
+                return el if el.text == text else False
+            except Exception:
+                return False
+
+        return self.until(
+            _exact_match,
+            timeout=timeout,
+            message=f"Text {text!r} not matched in element: {locator}",
+        )
+
+    def for_all_visible(
+        self,
+        locators: Locators,
+        *,
+        timeout: float | None = None,
+    ) -> list:
+        """Wait until all elements are visible and return them."""
+
+        return [self.for_visibility(locator, timeout=timeout) for locator in locators]
+
+    def for_any_visible(self, locators: Locators, *, timeout: float | None = None):
+        """Wait until any one of the locators is visible and return it."""
+
+        locators_list = list(locators)
+
+        def _any_visible(driver):
+            for locator in locators_list:
+                try:
+                    el = ec.visibility_of_element_located(locator)(driver)
+                    if el:
+                        return el
+                except Exception:
+                    pass
+            return False
+
+        return self.until(
+            _any_visible,
+            timeout=timeout,
+            message=f"None of {locators_list!r} became visible",
         )
