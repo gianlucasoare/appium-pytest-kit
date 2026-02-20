@@ -1,6 +1,7 @@
 """Reusable high-level UI actions composed with wait utilities."""
 
 
+import logging
 import time
 from collections.abc import Iterable
 
@@ -12,6 +13,8 @@ from selenium.webdriver.common.actions.pointer_input import PointerInput
 
 from appium_pytest_kit.errors import ActionError
 from appium_pytest_kit.waits import Locator, Waiter
+
+logger = logging.getLogger(__name__)
 
 
 class MobileActions:
@@ -28,6 +31,7 @@ class MobileActions:
     def tap(self, locator: Locator, *, timeout: float = 10.0) -> None:
         """Tap a visible element."""
 
+        logger.debug("tap  %s", locator)
         try:
             element = self._waiter.for_visibility(locator, timeout=timeout)
             element.click()
@@ -39,6 +43,7 @@ class MobileActions:
     def tap_if_present(self, locator: Locator, *, timeout: float = 2.0) -> bool:
         """Tap element if visible within timeout. Returns True if tapped."""
 
+        logger.debug("tap_if_present  %s", locator)
         try:
             element = self._waiter.for_visibility(locator, timeout=timeout)
             element.click()
@@ -98,6 +103,7 @@ class MobileActions:
     def tap_by_coordinates(self, x: int, y: int) -> None:
         """Tap at absolute screen coordinates (x, y)."""
 
+        logger.debug("tap_by_coordinates  x=%d  y=%d", x, y)
         try:
             actions = ActionChains(self._driver)
             actions.w3c_actions = ActionBuilder(
@@ -117,6 +123,7 @@ class MobileActions:
     def tap_center(self, locator: Locator, *, timeout: float = 10.0) -> None:
         """Tap the visual center of an element."""
 
+        logger.debug("tap_center  %s", locator)
         try:
             element = self._waiter.for_visibility(locator, timeout=timeout)
             loc = element.location
@@ -132,6 +139,7 @@ class MobileActions:
     def double_tap(self, locator: Locator, *, timeout: float = 10.0) -> None:
         """Double-tap a visible element."""
 
+        logger.debug("double_tap  %s", locator)
         try:
             element = self._waiter.for_visibility(locator, timeout=timeout)
             loc = element.location
@@ -166,6 +174,7 @@ class MobileActions:
     ) -> None:
         """Long-press a visible element for the given duration."""
 
+        logger.debug("long_press  %s  duration=%.1fs", locator, duration_seconds)
         try:
             element = self._waiter.for_visibility(locator, timeout=timeout)
             loc = element.location
@@ -201,6 +210,7 @@ class MobileActions:
     ) -> None:
         """Type text into a visible element."""
 
+        logger.debug("type_text  %s  value=%r  clear_first=%s", locator, value, clear_first)
         try:
             element = self._waiter.for_visibility(locator, timeout=timeout)
             if clear_first:
@@ -244,6 +254,10 @@ class MobileActions:
         Useful for apps that drop characters under fast input.
         """
 
+        logger.debug(
+            "type_text_slowly  %s  value=%r  delay=%.2fs",
+            locator, value, delay_per_char,
+        )
         try:
             element = self._waiter.for_visibility(locator, timeout=timeout)
             if clear_first:
@@ -261,6 +275,7 @@ class MobileActions:
     def clear(self, locator: Locator, *, timeout: float = 10.0) -> None:
         """Clear the text content of an element."""
 
+        logger.debug("clear  %s", locator)
         try:
             element = self._waiter.for_visibility(locator, timeout=timeout)
             element.clear()
@@ -291,8 +306,32 @@ class MobileActions:
         """Assert that the element is visible. Raises AssertionError if not."""
 
         effective_timeout = timeout if timeout is not None else self._waiter.default_timeout
+        logger.debug("assert:displayed  %s  timeout=%.1fs", locator, effective_timeout)
         if not self.is_displayed(locator, timeout=effective_timeout):
             msg = f"Element not displayed within {effective_timeout}s: {locator}"
+            raise AssertionError(msg)
+
+    def is_not_displayed(self, locator: Locator, *, timeout: float | None = None) -> bool:
+        """Return True if the element is NOT visible within timeout.
+
+        Waits up to ``timeout`` for the element to disappear. Returns True
+        immediately if the element is already gone.
+        """
+
+        effective_timeout = timeout if timeout is not None else self._waiter.default_timeout
+        try:
+            self._waiter.for_invisibility(locator, timeout=effective_timeout)
+            return True
+        except Exception:
+            return False
+
+    def assert_not_displayed(self, locator: Locator, *, timeout: float | None = None) -> None:
+        """Assert that the element is NOT visible. Raises AssertionError if it is."""
+
+        effective_timeout = timeout if timeout is not None else self._waiter.default_timeout
+        logger.debug("assert:not_displayed  %s  timeout=%.1fs", locator, effective_timeout)
+        if not self.is_not_displayed(locator, timeout=effective_timeout):
+            msg = f"Element was still displayed after {effective_timeout}s: {locator}"
             raise AssertionError(msg)
 
     def is_displayed_first_available(
@@ -346,6 +385,201 @@ class MobileActions:
             msg = (
                 f"At least one locator was unexpectedly displayed"
                 f" within {effective_timeout}s: {locs}"
+            )
+            raise AssertionError(msg)
+
+    # ------------------------------------------------------------------
+    # Text assertions
+    # ------------------------------------------------------------------
+
+    def assert_text(
+        self,
+        locator: Locator,
+        expected: str,
+        *,
+        timeout: float | None = None,
+    ) -> None:
+        """Assert that the element's text exactly equals *expected*.
+
+        Raises ``AssertionError`` with a clear diff if the text doesn't match.
+        """
+
+        effective_timeout = timeout if timeout is not None else self._waiter.default_timeout
+        logger.debug("assert:text  %s  expected=%r", locator, expected)
+        actual = self.text(locator, timeout=effective_timeout)
+        if actual != expected:
+            msg = (
+                f"Text mismatch for {locator}\n"
+                f"  expected: {expected!r}\n"
+                f"  actual:   {actual!r}"
+            )
+            raise AssertionError(msg)
+
+    def assert_text_contains(
+        self,
+        locator: Locator,
+        partial: str,
+        *,
+        timeout: float | None = None,
+    ) -> None:
+        """Assert that the element's text contains *partial* as a substring.
+
+        Raises ``AssertionError`` if the substring is not found.
+        """
+
+        effective_timeout = timeout if timeout is not None else self._waiter.default_timeout
+        logger.debug("assert:text_contains  %s  partial=%r", locator, partial)
+        actual = self.text(locator, timeout=effective_timeout)
+        if partial not in actual:
+            msg = (
+                f"Text of {locator} does not contain {partial!r}\n"
+                f"  actual text: {actual!r}"
+            )
+            raise AssertionError(msg)
+
+    def assert_text_not_empty(self, locator: Locator, *, timeout: float | None = None) -> None:
+        """Assert that the element's text is not blank (empty or whitespace-only)."""
+
+        effective_timeout = timeout if timeout is not None else self._waiter.default_timeout
+        logger.debug("assert:text_not_empty  %s", locator)
+        actual = self.text(locator, timeout=effective_timeout)
+        if not actual.strip():
+            msg = f"Element text is empty for {locator}"
+            raise AssertionError(msg)
+
+    # ------------------------------------------------------------------
+    # Attribute assertion
+    # ------------------------------------------------------------------
+
+    def assert_attribute(
+        self,
+        locator: Locator,
+        attr: str,
+        expected: str,
+        *,
+        timeout: float | None = None,
+    ) -> None:
+        """Assert that *attr* on the element equals *expected*.
+
+        Raises ``AssertionError`` with a clear diff if the attribute value
+        doesn't match. Use ``attribute()`` if you only need to read the value.
+        """
+
+        effective_timeout = timeout if timeout is not None else self._waiter.default_timeout
+        logger.debug("assert:attribute  %s  attr=%r  expected=%r", locator, attr, expected)
+        actual = self.attribute(locator, attr, timeout=effective_timeout)
+        if actual != expected:
+            msg = (
+                f"Attribute {attr!r} mismatch for {locator}\n"
+                f"  expected: {expected!r}\n"
+                f"  actual:   {actual!r}"
+            )
+            raise AssertionError(msg)
+
+    # ------------------------------------------------------------------
+    # Enabled / disabled state
+    # ------------------------------------------------------------------
+
+    def is_enabled(self, locator: Locator, *, timeout: float | None = None) -> bool:
+        """Return True if the element is visible and enabled (interactable)."""
+
+        effective_timeout = timeout if timeout is not None else self._waiter.default_timeout
+        try:
+            element = self._waiter.for_visibility(locator, timeout=effective_timeout)
+            return bool(element.is_enabled())
+        except Exception:
+            return False
+
+    def assert_enabled(self, locator: Locator, *, timeout: float | None = None) -> None:
+        """Assert that the element is enabled (interactable). Raises AssertionError if not."""
+
+        effective_timeout = timeout if timeout is not None else self._waiter.default_timeout
+        logger.debug("assert:enabled  %s", locator)
+        if not self.is_enabled(locator, timeout=effective_timeout):
+            msg = f"Element is not enabled within {effective_timeout}s: {locator}"
+            raise AssertionError(msg)
+
+    def assert_not_enabled(self, locator: Locator, *, timeout: float | None = None) -> None:
+        """Assert that the element is disabled. Raises AssertionError if it is enabled."""
+
+        effective_timeout = timeout if timeout is not None else self._waiter.default_timeout
+        logger.debug("assert:not_enabled  %s", locator)
+        try:
+            element = self._waiter.for_visibility(locator, timeout=effective_timeout)
+            enabled = bool(element.is_enabled())
+        except Exception:
+            return  # not visible → treat as not enabled, assertion passes
+        if enabled:
+            msg = f"Element is enabled but expected disabled: {locator}"
+            raise AssertionError(msg)
+
+    # ------------------------------------------------------------------
+    # Checked / selected state (checkboxes, toggles, radio buttons)
+    # ------------------------------------------------------------------
+
+    def is_checked(self, locator: Locator, *, timeout: float | None = None) -> bool:
+        """Return True if the element is checked or selected.
+
+        Checks the ``checked`` attribute first, then ``selected`` — covering
+        Android checkboxes/toggles and iOS switches/radio buttons.
+        """
+
+        effective_timeout = timeout if timeout is not None else self._waiter.default_timeout
+        try:
+            element = self._waiter.for_visibility(locator, timeout=effective_timeout)
+            for attr in ("checked", "selected"):
+                val = element.get_attribute(attr)
+                if val is not None:
+                    return str(val).lower() in ("true", "1", "yes")
+            return False
+        except Exception:
+            return False
+
+    def assert_checked(self, locator: Locator, *, timeout: float | None = None) -> None:
+        """Assert that the element is checked/selected. Raises AssertionError if not."""
+
+        effective_timeout = timeout if timeout is not None else self._waiter.default_timeout
+        logger.debug("assert:checked  %s", locator)
+        if not self.is_checked(locator, timeout=effective_timeout):
+            msg = f"Element is not checked/selected: {locator}"
+            raise AssertionError(msg)
+
+    def assert_not_checked(self, locator: Locator, *, timeout: float | None = None) -> None:
+        """Assert that the element is unchecked/unselected. Raises AssertionError if checked."""
+
+        effective_timeout = timeout if timeout is not None else self._waiter.default_timeout
+        logger.debug("assert:not_checked  %s", locator)
+        if self.is_checked(locator, timeout=effective_timeout):
+            msg = f"Element is checked/selected but expected unchecked: {locator}"
+            raise AssertionError(msg)
+
+    # ------------------------------------------------------------------
+    # Element count
+    # ------------------------------------------------------------------
+
+    def count(self, locator: Locator) -> int:
+        """Return the number of elements currently matching *locator* in the DOM.
+
+        Uses ``find_elements`` (no wait) so the count reflects the current UI
+        state at call time. Pair with a ``waiter`` condition when you need to
+        wait for a specific count to appear.
+        """
+
+        by, value = locator
+        return len(self._driver.find_elements(by, value))
+
+    def assert_count(self, locator: Locator, expected: int) -> None:
+        """Assert that exactly *expected* elements match *locator*.
+
+        Raises ``AssertionError`` with the actual count if they differ.
+        """
+
+        actual = self.count(locator)
+        if actual != expected:
+            msg = (
+                f"Element count mismatch for {locator}\n"
+                f"  expected: {expected}\n"
+                f"  actual:   {actual}"
             )
             raise AssertionError(msg)
 
@@ -405,6 +639,10 @@ class MobileActions:
     ) -> None:
         """Perform a swipe gesture using W3C Pointer Actions."""
 
+        logger.debug(
+            "swipe  (%d,%d)->(%d,%d)  duration=%dms",
+            start_x, start_y, end_x, end_y, duration_ms,
+        )
         try:
             actions = ActionChains(self._driver)
             actions.w3c_actions = ActionBuilder(
@@ -454,6 +692,10 @@ class MobileActions:
     ) -> None:
         """Scroll until the element is visible or max_swipes is reached."""
 
+        logger.debug(
+            "scroll_to_element  %s  direction=%s  max_swipes=%d",
+            locator, direction, max_swipes,
+        )
         for _ in range(max_swipes):
             try:
                 self._waiter.for_visibility(locator, timeout=1.5)
@@ -493,6 +735,7 @@ class MobileActions:
         - 67 = BACKSPACE
         """
 
+        logger.debug("press_keycode  %d", keycode)
         try:
             self._driver.press_keycode(keycode)
         except WebDriverException as exc:

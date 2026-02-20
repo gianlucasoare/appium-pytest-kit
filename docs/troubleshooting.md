@@ -2,6 +2,66 @@
 
 ---
 
+## Enabling debug logs
+
+`appium-pytest-kit` uses Python's standard `logging` module with the logger hierarchy `appium_pytest_kit.*`. No configuration is needed — just tell pytest to surface the logs:
+
+```bash
+# Print all INFO+ logs live in the terminal
+pytest --log-cli-level=INFO
+
+# Full debug trace (every wait, every action, every lifecycle event)
+pytest --log-cli-level=DEBUG
+
+# Capture logs in the report but only show on failure
+pytest --log-level=DEBUG
+```
+
+You can also set this permanently in `pyproject.toml` or `pytest.ini`:
+
+```toml
+# pyproject.toml
+[tool.pytest.ini_options]
+log_cli       = true
+log_cli_level = "INFO"
+log_level     = "DEBUG"   # also captured in failure output
+```
+
+### What each level shows
+
+| Level | Logger | Example message |
+|---|---|---|
+| `INFO` | `appium_pytest_kit.pytest_plugin` | `driver:created  session=abc123  platform=android  node=tests/test_login.py::test_valid` |
+| `INFO` | `appium_pytest_kit.pytest_plugin` | `driver:reuse  session=abc123  node=...` (retry keeping session alive) |
+| `INFO` | `appium_pytest_kit.pytest_plugin` | `driver:quit  session=abc123  node=...` |
+| `INFO` | `appium_pytest_kit.pytest_plugin` | `retry:keep-alive  attempt=1/2  node=...` |
+| `INFO` | `appium_pytest_kit.pytest_plugin` | `artifact:screenshot  artifacts/screenshots/test_foo.png` |
+| `INFO` | `appium_pytest_kit.pytest_plugin` | `artifact:video  artifacts/videos/test_foo.mp4` |
+| `INFO` | `appium_pytest_kit._internal.device_resolver` | `device:tier-1 (explicit)  name='Pixel 7'  udid=emulator-5554` |
+| `INFO` | `appium_pytest_kit._internal.server` | `server:starting  host=127.0.0.1  port=4723  timeout=30000ms` |
+| `INFO` | `appium_pytest_kit._internal.video` | `video:started` |
+| `DEBUG` | `appium_pytest_kit.waits` | `wait:visibility  ('id', 'username')  timeout=10.0s` |
+| `DEBUG` | `appium_pytest_kit.waits` | `wait:clickable  ('accessibility id', 'login_btn')  timeout=10.0s` |
+| `DEBUG` | `appium_pytest_kit.actions` | `tap  ('accessibility id', 'submit_button')` |
+| `DEBUG` | `appium_pytest_kit.actions` | `type_text  ('id', 'username')  value='testuser'  clear_first=True` |
+| `DEBUG` | `appium_pytest_kit.actions` | `assert:text  ('id', 'result')  expected='42'` |
+| `DEBUG` | `appium_pytest_kit.actions` | `swipe  (400,700)->(400,200)  duration=800ms` |
+
+### Typical CI failure output (INFO level)
+
+```
+INFO  appium_pytest_kit.device_resolver:  device:resolving  platform=android
+INFO  appium_pytest_kit.device_resolver:  device:tier-1 (explicit)  name='emulator-5554'  udid=emulator-5554
+INFO  appium_pytest_kit.pytest_plugin:    driver:created  session=4f2a1b  platform=android  node=tests/test_login.py::test_valid
+INFO  appium_pytest_kit.video:            video:started
+FAILED tests/test_login.py::test_valid
+INFO  appium_pytest_kit.pytest_plugin:    artifact:screenshot  artifacts/screenshots/test_valid.png
+INFO  appium_pytest_kit.pytest_plugin:    artifact:page_source  artifacts/pagesource/test_valid.xml
+INFO  appium_pytest_kit.pytest_plugin:    driver:quit  session=4f2a1b  node=tests/test_login.py::test_valid
+```
+
+---
+
 ## `DriverCreationError: Failed to create Appium session`
 
 **Checklist:**

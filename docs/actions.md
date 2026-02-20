@@ -219,9 +219,185 @@ ERRORS = [
 actions.assert_not_displayed_first_available(ERRORS, timeout=2.0)
 ```
 
+### `is_not_displayed(locator, *, timeout=None) → bool`
+
+Returns `True` if the element is **not** visible within `timeout` (the element may be hidden or absent from the DOM). The logical inverse of `is_displayed`.
+
+```python
+LOADING = (AppiumBy.ID, "com.example.app:id/spinner")
+
+# Wait for spinner to disappear
+waiter.for_invisibility(LOADING)
+
+# Or check in a conditional
+if actions.is_not_displayed(LOADING, timeout=5.0):
+    print("Loading finished")
+```
+
+### `assert_not_displayed(locator, *, timeout=None)`
+
+Raises `AssertionError` if the element is **still visible** after `timeout`.
+
+```python
+ERROR_TOAST = (AppiumBy.ID, "com.example.app:id/error_toast")
+actions.tap(DISMISS_BTN)
+actions.assert_not_displayed(ERROR_TOAST, timeout=3.0)
+```
+
 > **`is_displayed` vs `exists`**
 > - `is_displayed` — element must be rendered and visible on screen
 > - `exists` — element just needs to be in the DOM (may be off-screen or hidden)
+
+---
+
+## Text assertions
+
+### `assert_text(locator, expected, *, timeout=None)`
+
+Assert that the element's text **exactly equals** `expected`. Raises `AssertionError` with a clear diff showing expected vs actual.
+
+```python
+TOTAL = (AppiumBy.ID, "com.example.app:id/order_total")
+actions.assert_text(TOTAL, "$12.99")
+```
+
+### `assert_text_contains(locator, partial, *, timeout=None)`
+
+Assert that the element's text **contains** `partial` as a substring.
+
+```python
+GREETING = (AppiumBy.ID, "com.example.app:id/greeting")
+actions.assert_text_contains(GREETING, "testuser")   # "Welcome, testuser!" passes
+```
+
+### `assert_text_not_empty(locator, *, timeout=None)`
+
+Assert that the element's text is not blank (empty string or whitespace only).
+
+```python
+RESULT = (AppiumBy.ID, "com.example.app:id/result_label")
+actions.assert_text_not_empty(RESULT)
+```
+
+---
+
+## Attribute assertion
+
+### `assert_attribute(locator, attr, expected, *, timeout=None)`
+
+Assert that the element attribute `attr` equals `expected`. Use when you need to verify a specific attribute value rather than just reading it.
+
+```python
+TOGGLE = (AppiumBy.ACCESSIBILITY_ID, "dark_mode_toggle")
+actions.assert_attribute(TOGGLE, "checked", "true")
+
+FIELD = (AppiumBy.ID, "com.example.app:id/search")
+actions.assert_attribute(FIELD, "hint", "Search products")
+```
+
+---
+
+## Enabled / disabled state
+
+### `is_enabled(locator, *, timeout=None) → bool`
+
+Returns `True` if the element is visible **and** enabled (interactable). Returns `False` if the element is not found or is disabled.
+
+```python
+SUBMIT_BTN = (AppiumBy.ACCESSIBILITY_ID, "submit_button")
+
+if actions.is_enabled(SUBMIT_BTN):
+    actions.tap(SUBMIT_BTN)
+else:
+    print("Submit is disabled — form may be incomplete")
+```
+
+### `assert_enabled(locator, *, timeout=None)`
+
+Assert that the element is enabled. Raises `AssertionError` if it is disabled or not found.
+
+```python
+SUBMIT_BTN = (AppiumBy.ACCESSIBILITY_ID, "submit_button")
+actions.type_text(USERNAME, "user@example.com")
+actions.type_text(PASSWORD, "password123")
+actions.assert_enabled(SUBMIT_BTN)   # confirm form activated the button
+```
+
+### `assert_not_enabled(locator, *, timeout=None)`
+
+Assert that the element is disabled. Raises `AssertionError` if it is enabled. Elements that are not visible are treated as not enabled (assertion passes).
+
+```python
+CHECKOUT_BTN = (AppiumBy.ACCESSIBILITY_ID, "checkout_button")
+# Cart is empty — checkout should be disabled
+actions.assert_not_enabled(CHECKOUT_BTN)
+```
+
+---
+
+## Checked / selected state
+
+Use these for checkboxes, toggles, radio buttons, and switches. Checks both `checked` and `selected` attributes to cover Android and iOS elements.
+
+### `is_checked(locator, *, timeout=None) → bool`
+
+Returns `True` if the element is checked or selected.
+
+```python
+REMEMBER_ME = (AppiumBy.ACCESSIBILITY_ID, "remember_me_checkbox")
+
+if actions.is_checked(REMEMBER_ME):
+    print("Remember Me is on")
+```
+
+### `assert_checked(locator, *, timeout=None)`
+
+Assert that the element is checked/selected. Raises `AssertionError` if not.
+
+```python
+TERMS_CHECKBOX = (AppiumBy.ID, "com.example.app:id/terms_checkbox")
+actions.tap(TERMS_CHECKBOX)
+actions.assert_checked(TERMS_CHECKBOX)
+```
+
+### `assert_not_checked(locator, *, timeout=None)`
+
+Assert that the element is unchecked/unselected. Raises `AssertionError` if checked.
+
+```python
+NOTIFICATIONS_TOGGLE = (AppiumBy.ACCESSIBILITY_ID, "notifications_toggle")
+actions.tap(NOTIFICATIONS_TOGGLE)          # toggle off
+actions.assert_not_checked(NOTIFICATIONS_TOGGLE)
+```
+
+---
+
+## Element count
+
+### `count(locator) → int`
+
+Return the number of elements currently matching `locator` in the DOM. No waiting — reflects the current state at call time.
+
+```python
+LIST_ITEM = (AppiumBy.ID, "com.example.app:id/cart_item")
+n = actions.count(LIST_ITEM)
+print(f"Cart has {n} item(s)")
+```
+
+### `assert_count(locator, expected)`
+
+Assert that exactly `expected` elements match `locator`. Raises `AssertionError` with the actual count if they differ.
+
+```python
+LIST_ITEM = (AppiumBy.ID, "com.example.app:id/cart_item")
+
+# After adding 3 items to cart
+actions.assert_count(LIST_ITEM, 3)
+
+# After clearing the cart
+actions.tap(CLEAR_CART_BTN)
+actions.assert_count(LIST_ITEM, 0)
+```
 
 ---
 

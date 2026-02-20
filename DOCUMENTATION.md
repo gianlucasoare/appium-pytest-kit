@@ -7,8 +7,10 @@
 | Install the library | [Installation →](docs/installation.md) |
 | Set up a new project | [Project structure →](docs/project-structure.md) |
 | Configure my device and app | [Configuration →](docs/configuration.md) |
+| See every CLI flag in one place | [CLI reference →](docs/cli-reference.md) |
 | Understand the built-in fixtures | [Fixtures →](docs/fixtures.md) |
 | Build page object classes | [Page objects guide →](docs/page-objects.md) |
+| Build flow objects (multi-page journeys) | [Page objects guide →](docs/page-objects.md) |
 | Know what to put in `conftest.py` | [conftest guide →](docs/conftest-guide.md) |
 | Look up wait methods | [Waits reference →](docs/waits.md) |
 | Look up action methods | [Actions reference →](docs/actions.md) |
@@ -339,6 +341,33 @@ See [docs/configuration.md](docs/configuration.md) for the full settings referen
 ---
 
 ## Migration notes
+
+### From v0.1.2 → v0.1.3
+
+All existing tests continue to work without changes.
+
+**New optional extra:**
+```bash
+pip install "appium-pytest-kit[retry]"  # adds pytest-retry
+```
+
+**New CLI flags:**
+- `--retries N` — retry failed tests N extra times *(requires `[retry]` extra)*
+- `--retry-delay SECS` — wait between retry attempts
+- `--app-fail-fast` — stop the suite after a test exhausts all retries
+
+**New retry behaviour:**
+- During retries the existing Appium session is reused — no session restart between attempts
+- After the final failure or a pass, the session is quit and the next test starts fresh (matches `appium-framework-setup` behaviour with `pytest-rerunfailures`)
+- Use `@pytest.mark.flaky(retries=N)` per-test or `--retries N` globally (pytest-retry's API)
+
+**New scaffold output:**
+- `appium-pytest-kit-init --framework` now generates `flows/base_flow.py` and `flows/example_flow.py` in addition to the existing `flows/__init__.py`
+
+**Bug fix:**
+- `--app-explicit-wait-timeout` was documented as a direct CLI flag but does not exist. The correct way to override this at the command line is: `--app-override APP_EXPLICIT_WAIT_TIMEOUT=15`
+
+---
 
 ### From pre-v0.1.1
 

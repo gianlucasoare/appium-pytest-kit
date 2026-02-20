@@ -21,8 +21,11 @@ appium-pytest-kit-init --framework --root my-project
 | **Auto failure artifacts** | Screenshot + page source captured automatically on every failure |
 | **3-tier device resolution** | explicit settings → named profile → auto-detect via adb/xcrun |
 | **Session modes** | `clean` (per-test) · `clean-session` (shared) · `debug` (keep alive) |
+| **Retry support** | Session reused across retry attempts — no restart cost between tries |
+| **Fail-fast** | `--app-fail-fast` stops the suite after retries are exhausted, not before |
 | **Explicit waits** | `WaitTimeoutError` with structured `.locator` and `.timeout` context |
 | **High-level actions** | tap, type, swipe, scroll, assertions — all wait-safe |
+| **Page + flow objects** | Scaffold generates `pages/` and `flows/` with base classes ready to extend |
 | **Extension hooks** | Override settings, inject capabilities, run code after driver creation |
 | **CLI scaffold** | One command to generate a full project structure |
 
@@ -43,6 +46,7 @@ All required dependencies are **installed automatically** with `pip install appi
 ```bash
 pip install "appium-pytest-kit[yaml]"    # device profile YAML support
 pip install "appium-pytest-kit[allure]"  # Allure report attachments
+pip install "appium-pytest-kit[retry]"   # pytest-retry for flaky test handling
 pip install "appium-pytest-kit[all]"     # all optional extras
 ```
 
@@ -50,6 +54,7 @@ pip install "appium-pytest-kit[all]"     # all optional extras
 |---|---|---|
 | `[yaml]` | PyYAML ≥ 6.0 | Named device profiles in `data/devices.yaml` |
 | `[allure]` | allure-pytest ≥ 2.13.0 | Screenshots + page source in Allure reports |
+| `[retry]` | pytest-retry ≥ 0.6.0 | Retry flaky tests while reusing the same Appium session |
 
 ---
 
@@ -189,6 +194,33 @@ APP_SESSION_MODE=debug          # shared + keep alive on failure (local debuggin
 
 ---
 
+## Retry support
+
+Install the extra, then use `@pytest.mark.retry` or the `--retry` CLI flag:
+
+```bash
+pip install "appium-pytest-kit[retry]"
+```
+
+```python
+# Retry this test up to 2 extra times (3 total attempts)
+@pytest.mark.flaky(retries=2)
+def test_flaky_animation(actions):
+    actions.tap(START_BTN)
+    actions.assert_displayed(RESULT_SCREEN)
+```
+
+```bash
+# Retry every failed test up to 2 extra times, stop if something is truly broken
+pytest --retries 2 --retry-delay 1 --app-fail-fast
+```
+
+**How it works:** during retries the same Appium session is reused — no restart between attempts. Once the test passes or all retries are exhausted, the session is quit and the next test starts fresh.
+
+See [docs/cli-reference.md](docs/cli-reference.md) for the full retry flag reference.
+
+---
+
 ## Device resolution (3-tier)
 
 1. **Explicit** — `APP_DEVICE_NAME` / `APP_UDID` in `.env` or CLI
@@ -230,10 +262,14 @@ pytest --appium-url http://192.168.1.10:4723
 pytest --app-session-mode clean-session
 pytest --app-device-profile pixel7
 pytest --app-video-policy failed
-pytest --app-explicit-wait-timeout 15
+pytest --app-override APP_EXPLICIT_WAIT_TIMEOUT=15
 pytest --app-capabilities-json '{"autoGrantPermissions": true}'
 pytest --app-manage-appium-server
 pytest --app-reporting-enabled
+
+# Retry support (requires appium-pytest-kit[retry])
+pytest --retries 2 --retry-delay 1          # retry all tests up to 2 extra times
+pytest --retries 2 --app-fail-fast          # stop suite after retries are exhausted
 ```
 
 See [docs/configuration.md](docs/configuration.md) for all settings.
@@ -292,10 +328,35 @@ actions.type_if_present(locator, "text")
 actions.type_text_slowly(locator, "otp", delay_per_char=0.15)
 actions.clear(locator)
 
-# Assertions
+# Visibility assertions
 actions.is_displayed(locator)
 actions.assert_displayed(locator)
+actions.is_not_displayed(locator)
+actions.assert_not_displayed(locator)
+actions.assert_displayed_first_available([l1, l2])
 actions.assert_not_displayed_first_available([l1, l2])
+
+# Text assertions
+actions.assert_text(locator, "exact text")
+actions.assert_text_contains(locator, "partial")
+actions.assert_text_not_empty(locator)
+
+# Attribute assertion
+actions.assert_attribute(locator, "checked", "true")
+
+# Enabled/disabled state
+actions.is_enabled(locator)
+actions.assert_enabled(locator)
+actions.assert_not_enabled(locator)
+
+# Checked/selected state (checkboxes, toggles)
+actions.is_checked(locator)
+actions.assert_checked(locator)
+actions.assert_not_checked(locator)
+
+# Element count
+actions.count(locator)           # → int
+actions.assert_count(locator, 3)
 
 # Scroll
 actions.scroll_down()
@@ -357,6 +418,27 @@ flowchart TD
 
 ---
 
+## Debug logs
+
+`appium-pytest-kit` logs every action, wait, and session lifecycle event using Python's standard `logging` module. Enable them with a single pytest flag:
+
+```bash
+pytest --log-cli-level=INFO    # session lifecycle + artifacts
+pytest --log-cli-level=DEBUG   # full trace (every tap, wait, scroll)
+```
+
+Or persist in `pyproject.toml`:
+
+```toml
+[tool.pytest.ini_options]
+log_cli       = true
+log_cli_level = "INFO"
+```
+
+See [docs/troubleshooting.md](docs/troubleshooting.md) for a full table of log messages.
+
+---
+
 ## Local development
 
 ```bash
@@ -375,6 +457,7 @@ python -m pytest --collect-only examples/basic/tests -q
 | Installation + dependencies | [docs/installation.md](docs/installation.md) |
 | Project structure + scaffold | [docs/project-structure.md](docs/project-structure.md) |
 | Configuration (all settings) | [docs/configuration.md](docs/configuration.md) |
+| **CLI reference (all flags)** | [docs/cli-reference.md](docs/cli-reference.md) |
 | Built-in fixtures | [docs/fixtures.md](docs/fixtures.md) |
 | Page objects guide | [docs/page-objects.md](docs/page-objects.md) |
 | conftest.py guide | [docs/conftest-guide.md](docs/conftest-guide.md) |

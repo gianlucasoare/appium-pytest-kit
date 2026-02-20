@@ -2,6 +2,7 @@
 
 
 import json
+import logging
 import subprocess
 import warnings
 from dataclasses import dataclass
@@ -9,6 +10,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from appium_pytest_kit.errors import ConfigurationError
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from appium_pytest_kit.settings import AppiumPytestKitSettings
@@ -41,14 +44,33 @@ class DeviceResolver:
         3. Auto-detect via adb (Android) or xcrun (iOS)
         """
         s = self._settings
+        logger.info("device:resolving  platform=%s", s.platform)
 
         if s.device_name or s.udid:
-            return self._from_explicit()
+            info = self._from_explicit()
+            logger.info(
+                "device:tier-1 (explicit)  name=%r  udid=%s  version=%s",
+                info.device_name, info.udid or "—", info.platform_version or "—",
+            )
+            return info
 
         if s.device_profile:
-            return self._from_yaml()
+            info = self._from_yaml()
+            logger.info(
+                "device:tier-2 (profile=%r)  name=%r  udid=%s",
+                s.device_profile, info.device_name, info.udid or "—",
+            )
+            return info
 
-        return self._auto_detect()
+        info = self._auto_detect()
+        if info:
+            logger.info(
+                "device:tier-3 (auto-detect)  name=%r  udid=%s  version=%s",
+                info.device_name, info.udid or "—", info.platform_version or "—",
+            )
+        else:
+            logger.info("device:tier-3 (auto-detect)  no device found")
+        return info
 
     # ------------------------------------------------------------------
     # Tier 1 - explicit settings

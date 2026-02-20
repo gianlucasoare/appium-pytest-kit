@@ -1,10 +1,13 @@
 """Local Appium server lifecycle helpers."""
 
 
+import logging
 from dataclasses import dataclass
 
 from appium_pytest_kit.errors import ConfigurationError
 from appium_pytest_kit.settings import AppiumPytestKitSettings
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,14 +61,22 @@ class AppiumServerManager:
             *self._settings.appium_server_args,
         ]
         timeout_ms = max(int(self._settings.appium_start_timeout * 1000), 1)
+        logger.info(
+            "server:starting  host=%s  port=%d  timeout=%dms",
+            self._settings.appium_host,
+            self._settings.appium_port,
+            timeout_ms,
+        )
         service.start(args=args, timeout_ms=timeout_ms)
 
         if not self._flag(service, "is_running"):
             msg = "Failed to start managed Appium server"
             raise ConfigurationError(msg)
 
+        url = self._build_managed_url()
+        logger.info("server:ready  url=%s", url)
         self._service = service
-        return AppiumServerInfo(url=self._build_managed_url(), managed=True)
+        return AppiumServerInfo(url=url, managed=True)
 
     def stop(self) -> None:
         """Stop managed Appium process when running."""
@@ -73,5 +84,6 @@ class AppiumServerManager:
         if self._service is None:
             return
         if self._flag(self._service, "is_running"):
+            logger.info("server:stopping")
             self._service.stop()
         self._service = None

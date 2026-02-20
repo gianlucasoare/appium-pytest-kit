@@ -6,6 +6,8 @@ Add page fixtures, shared helpers, and hook implementations here.
 
 
 import pytest
+from flows.auth_flow import AuthFlow
+from flows.profile_flow import ProfileFlow
 from pages.home_page import HomePage
 from pages.login_page import LoginPage
 from pages.profile_page import ProfilePage
@@ -55,6 +57,26 @@ def logged_in_profile(logged_in_home, home_page, profile_page) -> ProfilePage:
     home_page.tap_profile()
     assert profile_page.is_loaded(), "Profile page did not load"
     return profile_page
+
+
+# ── Flow fixtures ────────────────────────────────────────────────────────────
+# Flows orchestrate multi-page journeys. Use them in tests that span screens.
+
+@pytest.fixture
+def auth_flow(driver, waiter, actions) -> AuthFlow:
+    return AuthFlow(driver, waiter, actions)
+
+
+@pytest.fixture
+def profile_flow(driver, waiter, actions) -> ProfileFlow:
+    return ProfileFlow(driver, waiter, actions)
+
+
+@pytest.fixture
+def logged_in(auth_flow: AuthFlow) -> AuthFlow:
+    """Log in once and return the auth flow in an authenticated state."""
+    auth_flow.login(TEST_USERNAME, TEST_PASSWORD)
+    return auth_flow
 
 
 # ── Hook implementations ─────────────────────────────────────────────────────

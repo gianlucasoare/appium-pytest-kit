@@ -169,6 +169,53 @@ class ExamplePage(BasePage):
             return False
 """
 
+_BASE_FLOW = """\
+\"\"\"Base class for all flows.\"\"\"
+
+
+from appium_pytest_kit.actions import MobileActions
+from appium_pytest_kit.waits import Waiter
+
+
+class BaseFlow:
+    \"\"\"Thin composition base providing driver, waiter and actions.
+
+    Flows orchestrate multi-page journeys. Unlike page objects (which model
+    a single screen), a flow coordinates several pages to complete a user
+    journey — e.g. "log in, open settings, change language, log out".
+    \"\"\"
+
+    def __init__(self, driver, waiter: Waiter, actions: MobileActions) -> None:
+        self._driver = driver
+        self._waiter = waiter
+        self._actions = actions
+"""
+
+_EXAMPLE_FLOW = """\
+\"\"\"Example flow — replace with your own multi-page journeys.\"\"\"
+
+
+from flows.base_flow import BaseFlow
+from pages.example_page import ExamplePage
+
+
+class ExampleFlow(BaseFlow):
+    \"\"\"Orchestrates a simple journey that starts on ExamplePage.
+
+    Replace ExamplePage with real page imports and add business-logic steps
+    that span multiple screens of your app.
+    \"\"\"
+
+    def _example_page(self) -> ExamplePage:
+        return ExamplePage(self._driver, self._waiter, self._actions)
+
+    def open_example(self) -> ExamplePage:
+        \"\"\"Navigate to ExamplePage and confirm it loads.\"\"\"
+        page = self._example_page()
+        assert page.is_loaded(), "ExamplePage did not load"
+        return page
+"""
+
 _SMOKE_TEST = """\
 \"\"\"Starter smoke test — adapt to your app.\"\"\"
 
@@ -246,6 +293,8 @@ def scaffold_framework(root: Path, *, force: bool = False) -> list[str]:
     _write("pages/base_page.py", _BASE_PAGE)
     _write("pages/example_page.py", _EXAMPLE_PAGE)
     _write("flows/__init__.py", "")
+    _write("flows/base_flow.py", _BASE_FLOW)
+    _write("flows/example_flow.py", _EXAMPLE_FLOW)
     _write("tests/__init__.py", "")
     _write("tests/android/__init__.py", "")
     _write("tests/android/test_smoke.py", _SMOKE_TEST)

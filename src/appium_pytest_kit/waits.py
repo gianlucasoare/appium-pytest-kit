@@ -1,6 +1,7 @@
 """Generic explicit wait primitives for mobile UI interactions."""
 
 
+import logging
 from collections.abc import Callable, Iterable
 from typing import TypeVar
 
@@ -9,6 +10,8 @@ from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 
 from appium_pytest_kit.errors import WaitTimeoutError
+
+logger = logging.getLogger(__name__)
 
 ConditionResult = TypeVar("ConditionResult")
 Locator = tuple[str, str]
@@ -60,6 +63,8 @@ class Waiter:
     def for_presence(self, locator: Locator, *, timeout: float | None = None):
         """Wait for element presence and return it."""
 
+        t = timeout or self._default_timeout
+        logger.debug("wait:presence  %s  timeout=%.1fs", locator, t)
         return self.until(
             ec.presence_of_element_located(locator),
             timeout=timeout,
@@ -69,6 +74,8 @@ class Waiter:
     def for_visibility(self, locator: Locator, *, timeout: float | None = None):
         """Wait for element visibility and return it."""
 
+        t = timeout or self._default_timeout
+        logger.debug("wait:visibility  %s  timeout=%.1fs", locator, t)
         return self.until(
             ec.visibility_of_element_located(locator),
             timeout=timeout,
@@ -78,6 +85,8 @@ class Waiter:
     def for_clickable(self, locator: Locator, *, timeout: float | None = None):
         """Wait for element to be clickable and return it."""
 
+        t = timeout or self._default_timeout
+        logger.debug("wait:clickable  %s  timeout=%.1fs", locator, t)
         return self.until(
             ec.element_to_be_clickable(locator),
             timeout=timeout,
@@ -87,6 +96,8 @@ class Waiter:
     def for_invisibility(self, locator: Locator, *, timeout: float | None = None) -> bool:
         """Wait for element to be invisible (or absent) and return True."""
 
+        t = timeout or self._default_timeout
+        logger.debug("wait:invisibility  %s  timeout=%.1fs", locator, t)
         return self.until(
             ec.invisibility_of_element_located(locator),
             timeout=timeout,
@@ -102,6 +113,8 @@ class Waiter:
     ):
         """Wait until element text contains substring, return True."""
 
+        t = timeout or self._default_timeout
+        logger.debug("wait:text_contains  %s  text=%r  timeout=%.1fs", locator, text, t)
         return self.until(
             ec.text_to_be_present_in_element(locator, text),
             timeout=timeout,
@@ -116,6 +129,9 @@ class Waiter:
         timeout: float | None = None,
     ):
         """Wait until element text exactly matches, return element."""
+
+        t = timeout or self._default_timeout
+        logger.debug("wait:text_equals  %s  text=%r  timeout=%.1fs", locator, text, t)
 
         def _exact_match(driver):
             try:
@@ -147,6 +163,9 @@ class Waiter:
         if not locs:
             return []
 
+        t = timeout or self._default_timeout
+        logger.debug("wait:all_visible  %d locators  timeout=%.1fs", len(locs), t)
+
         def _all_visible(driver):
             try:
                 elements = [ec.visibility_of_element_located(loc)(driver) for loc in locs]
@@ -169,6 +188,8 @@ class Waiter:
         """Wait until every locator in the list is invisible or absent."""
 
         locators_list = list(locators)
+        t = timeout or self._default_timeout
+        logger.debug("wait:all_gone  %d locators  timeout=%.1fs", len(locators_list), t)
 
         def _all_gone(driver):
             for locator in locators_list:
@@ -197,6 +218,9 @@ class Waiter:
         Useful for hybrid apps waiting for a WEBVIEW context to become available.
         """
 
+        t = timeout or self._default_timeout
+        logger.debug("wait:context_contains  %r  timeout=%.1fs", substring, t)
+
         def _cond(driver):
             try:
                 for ctx in driver.contexts:
@@ -223,6 +247,9 @@ class Waiter:
         Returns the full activity name. No-op / always-true on iOS.
         """
 
+        t = timeout or self._default_timeout
+        logger.debug("wait:android_activity  %r  timeout=%.1fs", partial_name, t)
+
         def _cond(driver):
             try:
                 activity = driver.current_activity or ""
@@ -240,6 +267,8 @@ class Waiter:
         """Wait until any one of the locators is visible and return it."""
 
         locators_list = list(locators)
+        t = timeout or self._default_timeout
+        logger.debug("wait:any_visible  %d locators  timeout=%.1fs", len(locators_list), t)
 
         def _any_visible(driver):
             for locator in locators_list:
