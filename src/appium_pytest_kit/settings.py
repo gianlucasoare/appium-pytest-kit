@@ -49,6 +49,23 @@ class AppiumPytestKitSettings(BaseSettings):
     capabilities_json: dict[str, Any] = Field(default_factory=dict)
 
     session_mode: Literal["clean", "clean-session", "debug"] = "clean"
+    """Driver session lifecycle strategy.
+
+    - ``clean``         — a fresh Appium session is created and quit for every test function
+                          (default; maximum isolation, slower due to session startup overhead).
+    - ``clean-session`` — a single Appium session is shared across the whole test suite and
+                          quit once at the end (faster, but tests share driver state).
+    - ``debug``         — same as ``clean-session`` but the session is kept alive even when a
+                          test fails so you can inspect the device after a failure.
+    """
+
+    explicit_wait_timeout: float = 10.0
+    """Default timeout in seconds used by ``Waiter`` and ``MobileActions`` explicit waits.
+
+    This is independent of ``implicit_wait`` (the Appium-level driver implicit wait).
+    Set via ``APP_EXPLICIT_WAIT_TIMEOUT``.
+    """
+
     device_profile: str | None = None
     devices_yaml: Path = Path("data/devices.yaml")
     is_simulator: bool = False

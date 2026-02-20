@@ -29,6 +29,11 @@ class Waiter:
         self._default_timeout = default_timeout
         self._poll_frequency = poll_frequency
 
+    @property
+    def default_timeout(self) -> float:
+        """The default wait timeout in seconds."""
+        return self._default_timeout
+
     def until(
         self,
         condition: Callable[[object], ConditionResult],
@@ -131,9 +136,29 @@ class Waiter:
         *,
         timeout: float | None = None,
     ) -> list:
-        """Wait until all elements are visible and return them."""
+        """Wait until all elements are visible simultaneously and return them.
 
-        return [self.for_visibility(locator, timeout=timeout) for locator in locators]
+        Uses a single wait that polls until every locator is visible at the same
+        instant, so the timeout applies to the whole group rather than each element
+        individually.
+        """
+
+        locs = list(locators)
+        if not locs:
+            return []
+
+        def _all_visible(driver):
+            try:
+                elements = [ec.visibility_of_element_located(loc)(driver) for loc in locs]
+                return elements if all(elements) else False
+            except Exception:
+                return False
+
+        return self.until(
+            _all_visible,
+            timeout=timeout,
+            message=f"Not all elements became visible: {locs}",
+        )
 
     def for_all_gone(
         self,

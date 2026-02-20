@@ -273,14 +273,16 @@ class MobileActions:
     # Assertions
     # ------------------------------------------------------------------
 
-    def is_displayed(self, locator: Locator, *, timeout: float = 1.0) -> bool:
+    def is_displayed(self, locator: Locator, *, timeout: float | None = None) -> bool:
         """Return True if the element is visible within timeout, False otherwise.
 
         Unlike `exists()` which checks DOM presence, this checks full visibility.
+        Defaults to the waiter's default_timeout when no timeout is given.
         """
 
+        effective_timeout = timeout if timeout is not None else self._waiter.default_timeout
         try:
-            self._waiter.for_visibility(locator, timeout=timeout)
+            self._waiter.for_visibility(locator, timeout=effective_timeout)
             return True
         except Exception:
             return False
@@ -288,7 +290,7 @@ class MobileActions:
     def assert_displayed(self, locator: Locator, *, timeout: float | None = None) -> None:
         """Assert that the element is visible. Raises AssertionError if not."""
 
-        effective_timeout = timeout if timeout is not None else self._waiter._default_timeout
+        effective_timeout = timeout if timeout is not None else self._waiter.default_timeout
         if not self.is_displayed(locator, timeout=effective_timeout):
             msg = f"Element not displayed within {effective_timeout}s: {locator}"
             raise AssertionError(msg)
@@ -315,7 +317,7 @@ class MobileActions:
         """
 
         locs = list(locators)
-        effective_timeout = timeout if timeout is not None else self._waiter._default_timeout
+        effective_timeout = timeout if timeout is not None else self._waiter.default_timeout
         if not self.is_displayed_first_available(locs, timeout=effective_timeout):
             msg = f"None of the locators were displayed within {effective_timeout}s: {locs}"
             raise AssertionError(msg)
@@ -339,7 +341,7 @@ class MobileActions:
         """Assert that none of the locators are visible. Raises AssertionError if any is shown."""
 
         locs = list(locators)
-        effective_timeout = timeout if timeout is not None else self._waiter._default_timeout
+        effective_timeout = timeout if timeout is not None else self._waiter.default_timeout
         if not self.not_displayed_first_available(locs, timeout=effective_timeout):
             msg = (
                 f"At least one locator was unexpectedly displayed"
