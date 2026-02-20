@@ -99,24 +99,39 @@ class TestForTextEquals:
 class TestForAllVisible:
     def test_returns_list_of_elements(self) -> None:
         waiter = _make_waiter()
-        elements = [MagicMock(), MagicMock()]
-        locators = [("id", "a"), ("id", "b")]
+        el_a, el_b = MagicMock(), MagicMock()
+        locator_map = {("id", "a"): el_a, ("id", "b"): el_b}
+        locators = list(locator_map)
 
-        with patch.object(waiter, "for_visibility", side_effect=elements):
+        def _mock_condition(locator):
+            return lambda _driver: locator_map[locator]
+
+        with patch(
+            "selenium.webdriver.support.expected_conditions.visibility_of_element_located",
+            side_effect=_mock_condition,
+        ):
             result = waiter.for_all_visible(locators)
 
-        assert result == elements
+        assert result == [el_a, el_b]
+
+    def test_returns_empty_list_for_no_locators(self) -> None:
+        waiter = _make_waiter()
+        assert waiter.for_all_visible([]) == []
 
     def test_raises_when_one_is_not_visible(self) -> None:
         waiter = _make_waiter()
         locators = [("id", "a"), ("id", "b")]
 
-        def _side_effect(locator, **kw):
+        # ("id", "b") returns False — the group condition stays falsy → timeout
+        def _mock_condition(locator):
             if locator == ("id", "b"):
-                raise WaitTimeoutError("not visible")
-            return MagicMock()
+                return lambda _driver: False
+            return lambda _driver: MagicMock()
 
-        with patch.object(waiter, "for_visibility", side_effect=_side_effect):
+        with patch(
+            "selenium.webdriver.support.expected_conditions.visibility_of_element_located",
+            side_effect=_mock_condition,
+        ):
             with pytest.raises(WaitTimeoutError):
                 waiter.for_all_visible(locators)
 

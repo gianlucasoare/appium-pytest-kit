@@ -14,7 +14,7 @@ from appium_pytest_kit.errors import (
     WaitTimeoutError,
 )
 from appium_pytest_kit.settings import AppiumPytestKitSettings, apply_cli_overrides, load_settings
-from appium_pytest_kit.waits import Waiter
+from appium_pytest_kit.waits import Locator, Waiter
 
 __all__ = [
     "ActionError",
@@ -26,6 +26,7 @@ __all__ = [
     "DriverConfig",
     "DriverCreationError",
     "LaunchValidationError",
+    "Locator",
     "MobileActions",
     "WaitTimeoutError",
     "Waiter",
