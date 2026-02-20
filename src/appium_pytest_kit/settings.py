@@ -13,6 +13,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 _KNOWN_CAPABILITY_KEYS: set[str] = {
     # W3C / core
     "platformName",
+    "browserName",
+    "browserVersion",
+    "acceptInsecureCerts",
+    "pageLoadStrategy",
+    "proxy",
+    "setWindowRect",
+    "timeouts",
+    "unhandledPromptBehavior",
     "automationName",
     "newCommandTimeout",
     "deviceName",
@@ -194,6 +202,24 @@ class AppiumPytestKitSettings(BaseSettings):
             msg = "platform must be 'android' or 'ios'"
             raise ValueError(msg)
         return normalized
+
+    @field_validator(
+        "device_name",
+        "platform_version",
+        "udid",
+        "app",
+        "app_package",
+        "app_activity",
+        "bundle_id",
+        "automation_name",
+        "device_profile",
+        mode="before",
+    )
+    @classmethod
+    def _normalize_blank_optional_strings(cls, value: Any) -> Any:
+        if isinstance(value, str) and value.strip() == "":
+            return None
+        return value
 
     @field_validator("appium_base_path")
     @classmethod

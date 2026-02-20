@@ -320,14 +320,22 @@ def _driver_shared(
 def _apply_device_info(capabilities: dict, info: DeviceInfo) -> None:
     """Merge DeviceInfo fields into capabilities without overwriting explicit values."""
 
-    if "deviceName" not in capabilities and info.device_name:
+    def _is_missing(capability_key: str) -> bool:
+        if capability_key not in capabilities:
+            return True
+        value = capabilities.get(capability_key)
+        if value is None:
+            return True
+        if isinstance(value, str):
+            return value.strip() == ""
+        return False
+
+    if _is_missing("deviceName") and info.device_name:
         capabilities["deviceName"] = info.device_name
-    if "udid" not in capabilities and info.udid:
+    if _is_missing("udid") and info.udid:
         capabilities["udid"] = info.udid
-    if "platformVersion" not in capabilities and info.platform_version:
+    if _is_missing("platformVersion") and info.platform_version:
         capabilities["platformVersion"] = info.platform_version
-    if "automationName" not in capabilities and info.automation_name:
-        capabilities["automationName"] = info.automation_name
 
 
 def _build_final_config(
@@ -344,6 +352,12 @@ def _build_final_config(
 
     if info is not None:
         _apply_device_info(capabilities, info)
+        if info.automation_name and not settings.automation_name:
+            existing_automation = capabilities.get("automationName")
+            normalized = str(existing_automation).strip() if existing_automation is not None else ""
+            default_automation = "UiAutomator2" if settings.platform == "android" else "XCUITest"
+            if not normalized or normalized.lower() == default_automation.lower():
+                capabilities["automationName"] = info.automation_name
 
     for extension_caps in request.config.pluginmanager.hook.pytest_appium_pytest_kit_capabilities(
         capabilities=capabilities,

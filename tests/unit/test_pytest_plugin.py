@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from appium_pytest_kit import pytest_plugin
+from appium_pytest_kit._internal.device_resolver import DeviceInfo
 from appium_pytest_kit.errors import ConfigurationError
 
 
@@ -139,3 +140,46 @@ def test_build_final_config_rejects_unknown_capability_in_strict_mode(monkeypatc
 
     with pytest.raises(ConfigurationError, match="unknown capability key"):
         pytest_plugin._build_final_config(settings, appium_server, request)
+
+
+def test_apply_device_info_overwrites_empty_capabilities() -> None:
+    capabilities = {"deviceName": "", "udid": "  ", "platformVersion": None}
+    info = DeviceInfo(
+        device_name="Pixel 8",
+        platform_name="android",
+        udid="emulator-5554",
+        platform_version="14",
+    )
+
+    pytest_plugin._apply_device_info(capabilities, info)
+
+    assert capabilities["deviceName"] == "Pixel 8"
+    assert capabilities["udid"] == "emulator-5554"
+    assert capabilities["platformVersion"] == "14"
+
+
+def test_build_final_config_uses_profile_automation_name_when_default(monkeypatch) -> None:
+    settings = SimpleNamespace(strict_config=False, platform="android", automation_name=None)
+    appium_server = SimpleNamespace(url="http://127.0.0.1:4723")
+
+    hook = SimpleNamespace(pytest_appium_pytest_kit_capabilities=lambda **kwargs: [])
+    request = SimpleNamespace(config=SimpleNamespace(pluginmanager=SimpleNamespace(hook=hook)))
+
+    monkeypatch.setattr(pytest_plugin, "validate_launch_config", lambda _settings: None)
+    monkeypatch.setattr(
+        pytest_plugin,
+        "build_driver_config",
+        lambda _settings, server_url: SimpleNamespace(
+            server_url=server_url,
+            capabilities={"platformName": "android", "automationName": "UiAutomator2"},
+            implicit_wait=0.0,
+        ),
+    )
+
+    info = DeviceInfo(
+        device_name="Pixel 7",
+        platform_name="android",
+        automation_name="Espresso",
+    )
+    config = pytest_plugin._build_final_config(settings, appium_server, request, info=info)
+    assert config.capabilities["automationName"] == "Espresso"

@@ -172,6 +172,23 @@ class TestTier3AutoDetect:
         assert info.udid == "ABC123"
         assert info.platform_name == "android"
 
+    def test_ios_device_detection_skips_host_mac(self) -> None:
+        s = _make_settings(platform="ios")
+        output = (
+            "== Devices ==\n"
+            "My Mac (14.5) (11111111-2222-3333-4444-555555555555)\n"
+            "iPhone 15 Pro (17.4) (AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE)\n"
+        )
+        result = MagicMock()
+        result.stdout = output
+        with patch("subprocess.run", return_value=result):
+            info = DeviceResolver(s).resolve()
+
+        assert info is not None
+        assert info.device_name == "iPhone 15 Pro"
+        assert info.udid == "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"
+        assert info.platform_name == "ios"
+
 
 class TestLaunchValidation:
     def test_android_with_app_passes(self) -> None:
@@ -188,6 +205,11 @@ class TestLaunchValidation:
 
     def test_android_without_app_info_raises(self) -> None:
         s = _make_settings(platform="android")
+        with pytest.raises(LaunchValidationError):
+            validate_launch_config(s)
+
+    def test_android_with_blank_app_values_raises(self) -> None:
+        s = _make_settings(platform="android", app="", app_package="", app_activity="")
         with pytest.raises(LaunchValidationError):
             validate_launch_config(s)
 

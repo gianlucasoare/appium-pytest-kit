@@ -26,6 +26,14 @@ def _default_automation_name(platform: str) -> str:
     return "UiAutomator2" if platform == "android" else "XCUITest"
 
 
+def _has_value(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return value.strip() != ""
+    return True
+
+
 def _base_capabilities(settings: AppiumPytestKitSettings) -> dict[str, Any]:
     caps: dict[str, Any] = {
         "platformName": settings.platform,
@@ -42,15 +50,15 @@ def _base_capabilities(settings: AppiumPytestKitSettings) -> dict[str, Any]:
         "udid": settings.udid,
         "app": settings.app,
     }
-    caps.update({key: value for key, value in optional_shared.items() if value is not None})
+    caps.update({key: value for key, value in optional_shared.items() if _has_value(value)})
 
     if settings.platform == "android":
         optional_android = {
             "appPackage": settings.app_package,
             "appActivity": settings.app_activity,
         }
-        caps.update({key: value for key, value in optional_android.items() if value is not None})
-    if settings.platform == "ios" and settings.bundle_id is not None:
+        caps.update({key: value for key, value in optional_android.items() if _has_value(value)})
+    if settings.platform == "ios" and _has_value(settings.bundle_id):
         caps["bundleId"] = settings.bundle_id
 
     caps.update(settings.capabilities_json)

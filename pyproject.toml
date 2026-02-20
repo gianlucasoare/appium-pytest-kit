@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "appium-pytest-kit"
-version = "0.1.4"
+version = "0.1.5"
 description = "Reusable Appium 2.x + pytest mobile test framework"
 readme = "README.md"
 requires-python = ">=3.11"

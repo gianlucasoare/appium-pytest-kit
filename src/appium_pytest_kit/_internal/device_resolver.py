@@ -3,6 +3,7 @@
 
 import json
 import logging
+import re
 import subprocess
 import warnings
 from dataclasses import dataclass
@@ -12,6 +13,9 @@ from typing import TYPE_CHECKING, Any
 from appium_pytest_kit.errors import ConfigurationError
 
 logger = logging.getLogger(__name__)
+_IOS_UDID_RE = re.compile(
+    r"^(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12})$"
+)
 
 if TYPE_CHECKING:
     from appium_pytest_kit.settings import AppiumPytestKitSettings
@@ -241,15 +245,25 @@ class DeviceResolver:
                 continue
             # Lines look like: "iPhone 15 Pro (17.4) (UDID)"
             parts = line.rsplit("(", 2)
-            if len(parts) >= 2:
-                name = parts[0].strip()
-                udid_part = parts[-1].rstrip(")").strip()
-                return DeviceInfo(
-                    device_name=name,
-                    platform_name="ios",
-                    udid=udid_part if len(udid_part) > 10 else None,
-                    is_simulator=False,
-                )
+            if len(parts) < 3:
+                continue
+            name = parts[0].strip()
+            lowered_name = name.lower()
+            if lowered_name in {"mac", "my mac"} or "macbook" in lowered_name or "imac" in lowered_name:
+                continue
+
+            version = parts[1].rstrip(")").strip() or None
+            udid_part = parts[-1].rstrip(")").strip()
+            if not _IOS_UDID_RE.fullmatch(udid_part):
+                continue
+
+            return DeviceInfo(
+                device_name=name,
+                platform_name="ios",
+                udid=udid_part,
+                platform_version=version,
+                is_simulator=False,
+            )
         return None
 
 
@@ -258,8 +272,8 @@ def validate_launch_config(settings: "AppiumPytestKitSettings") -> None:
     from appium_pytest_kit.errors import LaunchValidationError
 
     if settings.platform == "android":
-        has_app = settings.app is not None
-        has_activity = settings.app_package and settings.app_activity
+        has_app = bool(settings.app)
+        has_activity = bool(settings.app_package and settings.app_activity)
         if not has_app and not has_activity:
             msg = (
                 "Android launch requires APP_APP (apk path) "
@@ -268,8 +282,8 @@ def validate_launch_config(settings: "AppiumPytestKitSettings") -> None:
             raise LaunchValidationError(msg)
 
     elif settings.platform == "ios":
-        has_app = settings.app is not None
-        has_bundle = settings.bundle_id is not None
+        has_app = bool(settings.app)
+        has_bundle = bool(settings.bundle_id)
         if not has_app and not has_bundle:
             msg = "iOS launch requires APP_APP (ipa/app path) or APP_BUNDLE_ID"
             raise LaunchValidationError(msg)

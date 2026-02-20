@@ -184,3 +184,20 @@ class TestWaitTimeoutErrorContext:
 
         assert exc_info.value.timeout == 0.1
         assert exc_info.value.locator == ("id", "btn")
+
+
+def test_until_honors_zero_timeout(monkeypatch) -> None:
+    waiter = _make_waiter(timeout=5.0)
+    observed: dict[str, float] = {}
+
+    class _FakeWait:
+        def __init__(self, _driver, timeout, poll_frequency):
+            observed["timeout"] = timeout
+            observed["poll_frequency"] = poll_frequency
+
+        def until(self, _condition, _message=""):
+            return True
+
+    monkeypatch.setattr("appium_pytest_kit.waits.WebDriverWait", _FakeWait)
+    waiter.until(lambda _driver: True, timeout=0)
+    assert observed["timeout"] == 0
