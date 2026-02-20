@@ -5,23 +5,73 @@ import argparse
 from collections.abc import Sequence
 from pathlib import Path
 
-ENV_TEMPLATE = """# appium-pytest-kit starter configuration
-# Copy this file to your project root and adjust values.
+ENV_TEMPLATE = """\
+# appium-pytest-kit configuration
+# Rename this file to .env (or pass --app-env-file <path> to pytest).
+# Lines starting with # are comments and are ignored.
 
+# ── Platform ────────────────────────────────────────────────────────────────
+# Target mobile platform. Must be "android" or "ios".
 APP_PLATFORM=android
+
+# ── Appium server ───────────────────────────────────────────────────────────
+# URL of the running Appium server.
 APP_APPIUM_URL=http://127.0.0.1:4723
+
+# Set to "true" to let the kit start and stop Appium automatically.
+# When enabled, APP_APPIUM_URL is ignored and host/port below are used instead.
 APP_MANAGE_APPIUM_SERVER=false
+
+# ── Device targeting ────────────────────────────────────────────────────────
+# Human-readable device name, e.g. "Pixel 7" or "iPhone 15 Pro".
+# Leave blank for auto-detection (requires adb / xcrun).
 APP_DEVICE_NAME=
+
+# Device OS version, e.g. "14" (Android) or "17.4" (iOS).
+# Leave blank to let Appium pick the version automatically.
 APP_PLATFORM_VERSION=
+
+# Unique device identifier (serial for Android, UDID for iOS).
+# Required when multiple devices are connected at the same time.
 APP_UDID=
+
+# ── App under test ──────────────────────────────────────────────────────────
+# Full path to the .apk or .ipa to install and launch.
+# Leave blank if you want to launch an already-installed app by package/bundle.
 APP_APP=
+
+# Android only — package name of the installed app, e.g. "com.example.myapp".
 APP_APP_PACKAGE=
+
+# Android only — main activity to launch, e.g. ".MainActivity".
 APP_APP_ACTIVITY=
+
+# iOS only — bundle identifier of the installed app, e.g. "com.example.MyApp".
 APP_BUNDLE_ID=
+
+# ── Advanced ────────────────────────────────────────────────────────────────
+# Appium base path (default "/"). Change only if your server uses a custom path.
 APP_APPIUM_BASE_PATH=/
+
+# Extra Appium capabilities as a JSON object, e.g. {"wdaLocalPort": 8100}.
 APP_CAPABILITIES_JSON={}
+
+# Driver session lifecycle strategy:
+#   clean         - fresh driver per test (default; maximum isolation)
+#   clean-session - one shared driver for the whole suite (faster)
+#   debug         - like clean-session but keeps the session alive after failures
 APP_SESSION_MODE=clean
+
+# Explicit wait timeout in seconds used by Waiter and MobileActions (default 10).
+APP_EXPLICIT_WAIT_TIMEOUT=10
+
+# Screen recording policy:
+#   never  - no recording (default)
+#   failed - save video only when a test fails
+#   always - save video for every test
 APP_VIDEO_POLICY=never
+
+# Set to "true" to generate a JSON summary report in artifacts/.
 APP_REPORTING_ENABLED=false
 """
 
@@ -203,6 +253,7 @@ def scaffold_framework(root: Path, *, force: bool = False) -> list[str]:
     _write("tests/ios/test_smoke.py", _SMOKE_TEST)
     _write("conftest.py", _CONFTEST_PY)
     _write("pytest.ini", _PYTEST_INI)
+    _write(".env", ENV_TEMPLATE)
     _write(".env.example", ENV_TEMPLATE)
     _write(".gitignore", _GITIGNORE_EXTRA)
 

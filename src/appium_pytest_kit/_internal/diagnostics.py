@@ -2,6 +2,7 @@
 
 
 import re
+import warnings
 from pathlib import Path
 
 
@@ -18,7 +19,11 @@ def capture_screenshot(driver, node_id: str, artifacts_dir: Path) -> Path | None
         dest.parent.mkdir(parents=True, exist_ok=True)
         driver.save_screenshot(str(dest))
         return dest
-    except Exception:
+    except Exception as exc:
+        warnings.warn(
+            f"Failed to capture screenshot for {node_id!r}: {exc}",
+            stacklevel=2,
+        )
         return None
 
 
@@ -30,7 +35,11 @@ def capture_page_source(driver, node_id: str, artifacts_dir: Path) -> Path | Non
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(driver.page_source, encoding="utf-8")
         return dest
-    except Exception:
+    except Exception as exc:
+        warnings.warn(
+            f"Failed to capture page source for {node_id!r}: {exc}",
+            stacklevel=2,
+        )
         return None
 
 

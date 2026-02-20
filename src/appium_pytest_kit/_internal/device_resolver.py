@@ -3,6 +3,7 @@
 
 import json
 import subprocess
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -127,20 +128,32 @@ class DeviceResolver:
         except (FileNotFoundError, subprocess.TimeoutExpired):
             return None
 
-        for line in result.stdout.strip().splitlines()[1:]:
-            parts = line.split()
-            if len(parts) >= 2 and parts[1] == "device":
-                udid = parts[0]
-                version = self._adb_getprop(udid, "ro.build.version.release")
-                model = self._adb_getprop(udid, "ro.product.model") or udid
-                return DeviceInfo(
-                    device_name=model,
-                    platform_name="android",
-                    udid=udid,
-                    platform_version=version,
-                    is_simulator=False,
-                )
-        return None
+        connected = [
+            line.split()[0]
+            for line in result.stdout.strip().splitlines()[1:]
+            if len(line.split()) >= 2 and line.split()[1] == "device"
+        ]
+
+        if not connected:
+            return None
+
+        if len(connected) > 1:
+            warnings.warn(
+                f"Multiple Android devices detected ({connected}). "
+                "The first device will be used. Set APP_UDID to target a specific device.",
+                stacklevel=2,
+            )
+
+        udid = connected[0]
+        version = self._adb_getprop(udid, "ro.build.version.release")
+        model = self._adb_getprop(udid, "ro.product.model") or udid
+        return DeviceInfo(
+            device_name=model,
+            platform_name="android",
+            udid=udid,
+            platform_version=version,
+            is_simulator=False,
+        )
 
     def _adb_getprop(self, udid: str, prop: str) -> str | None:
         try:
@@ -178,8 +191,8 @@ class DeviceResolver:
             for device in devices:
                 if device.get("state") == "Booted":
                     # runtime looks like "com.apple.CoreSimulator.SimRuntime.iOS-17-4"
-                    version = runtime.rsplit("-", 2)[-2] + "." + runtime.rsplit("-", 1)[-1] \
-                        if "-" in runtime else None
+                    parts = runtime.rsplit("-", 2)
+                    version = f"{parts[-2]}.{parts[-1]}" if len(parts) >= 3 else None
                     return DeviceInfo(
                         device_name=device["name"],
                         platform_name="ios",

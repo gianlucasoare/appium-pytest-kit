@@ -10,6 +10,7 @@ from _pytest.stash import StashKey
 from appium_pytest_kit._internal.device_resolver import (
     DeviceInfo,
     DeviceResolver,
+    validate_launch_config,
 )
 from appium_pytest_kit._internal.diagnostics import (
     attach_to_allure,
@@ -246,6 +247,7 @@ def _build_final_config(
 ) -> DriverConfig:
     """Merge base capabilities with device info + hook extensions and return final config."""
 
+    validate_launch_config(settings)
     config = build_driver_config(settings, server_url=appium_server.url)
     capabilities = dict(config.capabilities)
 
@@ -306,7 +308,7 @@ def driver(settings, appium_server: AppiumServerInfo, device_info: DeviceInfo | 
 def waiter(driver, settings) -> Waiter:
     """Reusable waiter fixture built around current driver instance."""
 
-    return Waiter(driver, default_timeout=max(settings.implicit_wait, 10.0))
+    return Waiter(driver, default_timeout=settings.explicit_wait_timeout)
 
 
 @pytest.fixture
@@ -314,6 +316,23 @@ def actions(driver, waiter: Waiter) -> MobileActions:
     """Reusable app-agnostic actions fixture."""
 
     return MobileActions(driver=driver, waiter=waiter)
+
+
+@pytest.fixture
+def page_factory(driver, waiter: Waiter, actions: MobileActions):
+    """Factory fixture for instantiating page objects without boilerplate.
+
+    Usage::
+
+        def test_login(page_factory):
+            login = page_factory(LoginPage)
+            home  = page_factory(HomePage)
+    """
+
+    def _make(page_cls):
+        return page_cls(driver, waiter, actions)
+
+    return _make
 
 
 @pytest.hookimpl(wrapper=True)

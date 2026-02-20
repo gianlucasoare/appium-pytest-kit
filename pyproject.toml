@@ -33,6 +33,16 @@ dev = [
   "ruff>=0.9.0",
   "pytest-cov>=6.0.0",
 ]
+yaml = [
+  "PyYAML>=6.0",
+]
+allure = [
+  "allure-pytest>=2.13.0",
+]
+all = [
+  "PyYAML>=6.0",
+  "allure-pytest>=2.13.0",
+]
 
 [project.scripts]
 appium-pytest-kit-init = "appium_pytest_kit.cli:main"
