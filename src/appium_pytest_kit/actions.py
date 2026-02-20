@@ -806,6 +806,28 @@ class MobileActions:
             raise ActionError(msg, action="open_deep_link")
 
         logger.debug("open_deep_link  %s  app_id=%s", url, app_id or "auto")
+        if platform == "ios":
+            bundle_id = payload["bundleId"]
+            try:
+                self._driver.execute_script("mobile: deepLink", payload)
+                return
+            except WebDriverException as deep_link_exc:
+                logger.debug(
+                    "open_deep_link iOS fallback: mobile: deepLink failed (%s), trying driver.get",
+                    deep_link_exc,
+                )
+                try:
+                    self._driver.get(url)
+                    # Bring target app back to foreground after URL open if Safari/UI changed focus.
+                    self._driver.activate_app(bundle_id)
+                    return
+                except WebDriverException as fallback_exc:
+                    msg = (
+                        f"open_deep_link({url!r}) failed via mobile: deepLink and iOS fallback. "
+                        f"deepLink error: {deep_link_exc}"
+                    )
+                    raise ActionError(msg, action="open_deep_link") from fallback_exc
+
         try:
             self._driver.execute_script("mobile: deepLink", payload)
         except WebDriverException as exc:

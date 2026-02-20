@@ -85,7 +85,7 @@ pytest --app-env-file /path/to/staging.env
 | `APP_IMPLICIT_WAIT` | `implicit_wait` | `float` | `0.0` | Appium-level implicit wait in seconds (keep at 0 and use explicit waits instead) |
 | `APP_EXPLICIT_WAIT_TIMEOUT` | `explicit_wait_timeout` | `float` | `10.0` | Default timeout for `Waiter` and `MobileActions` explicit waits |
 | `APP_CAPABILITIES_JSON` | `capabilities_json` | JSON object | `{}` | Extra capabilities merged last — takes highest precedence |
-| `APP_STRICT_CONFIG` | `strict_config` | `bool` | `false` | Fail fast on unknown override keys and unknown capability keys |
+| `APP_STRICT_CONFIG` | `strict_config` | `bool` | `false` | Fail fast on unknown `APP_*` setting keys, override keys, and capability keys |
 
 ### Artifacts and reporting
 
@@ -175,9 +175,11 @@ pytest --app-override noReset=true --app-override autoGrantPermissions=true
 - `field_name=value` — Python field name
 
 In strict mode, unknown keys raise a pytest usage error so typos are caught early.
+This includes unknown `APP_*` environment setting names.
 
 When strict mode is disabled (default), unknown `--app-override` keys are treated as
-capability overrides (for example `--app-override autoGrantPermissions=true`).
+capability overrides (for example `--app-override autoGrantPermissions=true`), and
+unknown `APP_*` environment keys are ignored.
 Enable strict mode to fail on unknown capability keys.
 
 ---

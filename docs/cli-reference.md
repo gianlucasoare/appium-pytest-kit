@@ -364,7 +364,8 @@ Format: `KEY=VALUE` where KEY can be:
 - a setting field name (for example `noReset`)
 - a capability key (for example `autoGrantPermissions`)
 
-When strict mode is enabled (`--app-strict-config`), unknown capability keys are rejected.
+When strict mode is enabled (`--app-strict-config`), unknown capability keys are rejected,
+and unknown `APP_*` environment setting keys also fail fast.
 
 ---
 

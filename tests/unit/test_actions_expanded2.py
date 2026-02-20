@@ -374,6 +374,24 @@ class TestOpenDeepLink:
             "mobile: deepLink",
             {"url": "myapp://settings", "bundleId": "com.example.ios"},
         )
+        driver.get.assert_not_called()
+        driver.activate_app.assert_not_called()
+
+    def test_ios_falls_back_to_driver_get_when_mobile_deeplink_fails(self) -> None:
+        from selenium.common.exceptions import WebDriverException
+
+        actions, driver = _make_actions()
+        driver.capabilities = {"platformName": "iOS", "bundleId": "com.example.ios"}
+        driver.execute_script.side_effect = WebDriverException("unsupported command")
+
+        actions.open_deep_link("myapp://settings")
+
+        driver.execute_script.assert_called_once_with(
+            "mobile: deepLink",
+            {"url": "myapp://settings", "bundleId": "com.example.ios"},
+        )
+        driver.get.assert_called_once_with("myapp://settings")
+        driver.activate_app.assert_called_once_with("com.example.ios")
 
     def test_explicit_app_id_overrides_capabilities(self) -> None:
         actions, driver = _make_actions()
@@ -385,6 +403,19 @@ class TestOpenDeepLink:
             "mobile: deepLink",
             {"url": "myapp://home", "package": "com.new.app"},
         )
+
+    def test_ios_fallback_raises_when_driver_get_also_fails(self) -> None:
+        from selenium.common.exceptions import WebDriverException
+
+        actions, driver = _make_actions()
+        driver.capabilities = {"platformName": "iOS", "bundleId": "com.example.ios"}
+        driver.execute_script.side_effect = WebDriverException("unsupported command")
+        driver.get.side_effect = WebDriverException("cannot open url")
+
+        with pytest.raises(ActionError) as exc_info:
+            actions.open_deep_link("myapp://home")
+        assert exc_info.value.action == "open_deep_link"
+        assert "iOS fallback" in str(exc_info.value)
 
     def test_raises_when_required_capability_is_missing(self) -> None:
         actions, driver = _make_actions()

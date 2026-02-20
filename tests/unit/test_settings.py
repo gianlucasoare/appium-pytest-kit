@@ -105,3 +105,44 @@ def test_strict_mode_allows_w3c_browser_name() -> None:
         capabilities_json={"browserName": "Chrome"},
     )
     assert settings.capabilities_json["browserName"] == "Chrome"
+
+
+def test_strict_mode_rejects_unknown_app_env_key_in_env_file(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "APP_STRICT_CONFIG=true",
+                "APP_PLATFORM=android",
+                "APP_APP_ACTIVITTY=.MainActivity",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="APP_APP_ACTIVITTY"):
+        load_settings(env_file=env_file)
+
+
+def test_non_strict_mode_keeps_unknown_app_env_key_ignored(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "APP_STRICT_CONFIG=false",
+                "APP_PLATFORM=android",
+                "APP_APP_ACTIVITTY=.MainActivity",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_settings(env_file=env_file)
+    assert settings.strict_config is False
+
+
+def test_strict_mode_rejects_unknown_app_env_key_from_process_env(monkeypatch) -> None:
+    monkeypatch.setenv("APP_STRICT_CONFIG", "true")
+    monkeypatch.setenv("APP_APP_ACTIVITTY", ".MainActivity")
+    with pytest.raises(ValueError, match="APP_APP_ACTIVITTY"):
+        load_settings(env_file=Path("/tmp/does-not-need-to-exist.env"))

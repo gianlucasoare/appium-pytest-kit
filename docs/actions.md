@@ -541,6 +541,7 @@ actions.background_app(2)
 Open a deep link via Appium's mobile command.
 - Android uses `package` (from `app_id` or `appPackage` capability)
 - iOS uses `bundleId` (from `app_id` or `bundleId` capability)
+- On iOS, if `mobile: deepLink` is unsupported, it falls back to `driver.get(url)` and re-activates the target app.
 
 ```python
 actions.open_deep_link("myapp://profile", app_id="com.example.myapp")

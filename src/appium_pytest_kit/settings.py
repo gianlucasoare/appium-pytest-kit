@@ -2,6 +2,7 @@
 
 
 import json
+import os
 import re
 from collections.abc import Mapping
 from pathlib import Path
@@ -126,6 +127,48 @@ def _coerce_capability_value(raw: Any) -> Any:
         if lowered in {"null", "none"}:
             return None
         return raw
+
+
+_ENV_ASSIGNMENT_RE = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=")
+
+
+def _known_setting_env_keys() -> set[str]:
+    return {f"APP_{field_name.upper()}" for field_name in AppiumPytestKitSettings.model_fields}
+
+
+def _read_env_keys_from_file(path: Path) -> set[str]:
+    if not path.exists():
+        return set()
+    try:
+        payload = path.read_text(encoding="utf-8")
+    except OSError:
+        return set()
+
+    keys: set[str] = set()
+    for line in payload.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        match = _ENV_ASSIGNMENT_RE.match(line)
+        if match:
+            keys.add(match.group(1).upper())
+    return keys
+
+
+def _unknown_setting_env_keys(*, env_file: Path | None) -> list[str]:
+    known = {key.upper() for key in _known_setting_env_keys()}
+
+    observed: set[str] = set()
+    observed.update(
+        key.upper()
+        for key in os.environ
+        if key.upper().startswith("APP_")
+    )
+    if env_file is not None:
+        observed.update(_read_env_keys_from_file(env_file))
+
+    unknown = sorted(key for key in observed if key not in known)
+    return unknown
 
 
 class AppiumPytestKitSettings(BaseSettings):
@@ -264,9 +307,23 @@ class AppiumPytestKitSettings(BaseSettings):
 def load_settings(*, env_file: str | Path | None = None) -> AppiumPytestKitSettings:
     """Load framework settings from defaults + .env + env vars."""
 
+    env_path = Path(".env") if env_file is None else Path(env_file)
     if env_file is None:
-        return AppiumPytestKitSettings()
-    return AppiumPytestKitSettings(_env_file=env_file)
+        settings = AppiumPytestKitSettings()
+    else:
+        settings = AppiumPytestKitSettings(_env_file=env_file)
+
+    if settings.strict_config:
+        unknown_env_keys = _unknown_setting_env_keys(env_file=env_path)
+        if unknown_env_keys:
+            rendered = ", ".join(repr(key) for key in unknown_env_keys)
+            msg = (
+                "Strict config rejected unknown APP_* setting key(s): "
+                f"{rendered}. Use declared APP_ setting names or APP_CAPABILITIES_JSON."
+            )
+            raise ValueError(msg)
+
+    return settings
 
 
 def _normalize_setting_name(name: str) -> str:
