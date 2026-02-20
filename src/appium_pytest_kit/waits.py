@@ -211,32 +211,6 @@ class Waiter:
             message=f"Activity containing {partial_name!r} did not appear",
         )
 
-    def for_android_toast(
-        self,
-        text_substring: str,
-        *,
-        timeout: float = 5.0,
-    ) -> bool:
-        """Wait for an Android toast message containing *text_substring*.
-
-        Returns True when the toast appears. Toasts are transient — use a short timeout.
-        """
-
-        locator = ("xpath", f"//*[@text='{text_substring}']")
-
-        def _cond(driver):
-            try:
-                elements = driver.find_elements(*locator)
-                return bool(elements)
-            except Exception:
-                return False
-
-        return self.until(
-            _cond,
-            timeout=timeout,
-            message=f"Toast with text {text_substring!r} did not appear",
-        )
-
     def for_any_visible(self, locators: Locators, *, timeout: float | None = None):
         """Wait until any one of the locators is visible and return it."""
 
