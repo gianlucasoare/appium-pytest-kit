@@ -378,7 +378,6 @@ def test_wait_for_element(waiter):
 | `for_any_visible` | First visible locator |
 | `for_context_contains` | Driver context name contains substring |
 | `for_android_activity` | Android activity name contains string |
-| `for_android_toast` | Android toast message appeared |
 | `until` | Custom `expected_conditions` callable |
 
 All methods raise `WaitTimeoutError` on timeout. The error carries `.locator` and `.timeout` context fields.
@@ -410,6 +409,7 @@ def test_login_flow(actions):
 |---|---|
 | Tap | `tap`, `tap_if_present`, `tap_if_present_first_available`, `tap_by_coordinates`, `tap_center`, `double_tap`, `long_press` |
 | Text input | `type_text`, `type_if_present`, `type_if_present_first_available`, `type_first_available`, `type_text_slowly`, `clear` |
+| Assertions | `is_displayed`, `assert_displayed`, `is_displayed_first_available`, `assert_displayed_first_available`, `not_displayed_first_available`, `assert_not_displayed_first_available` |
 | Read | `text`, `attribute`, `exists` |
 | Scroll | `swipe`, `scroll_down`, `scroll_up`, `scroll_to_element` |
 | Keyboard | `hide_keyboard`, `press_keycode` |
@@ -1227,7 +1227,6 @@ allure serve allure-results
 | `for_any_visible(locators, *, timeout)` | element | First visible locator; returns it |
 | `for_context_contains(substring, *, timeout)` | `str` | Driver context name contains substring |
 | `for_android_activity(partial_name, *, timeout)` | `str` | Android activity name contains string |
-| `for_android_toast(text_substring, *, timeout)` | `bool` | Android toast with text appeared |
 | `until(condition, *, timeout, message)` | any | Custom `expected_conditions` callable |
 
 All methods raise `WaitTimeoutError` on timeout.
@@ -1268,7 +1267,6 @@ ctx = waiter.for_context_contains("WEBVIEW")  # hybrid apps
 
 waiter.for_android_activity("MainActivity")   # Android
 
-waiter.for_android_toast("Saved", timeout=3.0)  # Android toast
 ```
 
 ### WaitTimeoutError context
@@ -1314,6 +1312,19 @@ except WaitTimeoutError as exc:
 | `type_first_available(locators, value, *, timeout=10)` | `bool` | Type into first visible (raises on total fail) |
 | `type_text_slowly(locator, value, *, delay_per_char=0.1, timeout=10)` | — | Char-by-char with delay |
 | `clear(locator, *, timeout=10)` | — | Clear a text field |
+
+**Assertions**
+
+| Method | Returns | Description |
+|---|---|---|
+| `is_displayed(locator, *, timeout=1)` | `bool` | `True` if element is visible on screen |
+| `assert_displayed(locator, *, timeout=None)` | — | Raises `AssertionError` if element not visible |
+| `is_displayed_first_available(locators, *, timeout=1)` | `bool` | `True` if any locator is visible |
+| `assert_displayed_first_available(locators, *, timeout=None)` | — | Raises `AssertionError` if none visible |
+| `not_displayed_first_available(locators, *, timeout=1)` | `bool` | `True` if **none** of the locators are visible |
+| `assert_not_displayed_first_available(locators, *, timeout=None)` | — | Raises `AssertionError` if any is visible |
+
+> **`is_displayed` vs `exists`** — `exists()` checks DOM presence (element may be off-screen); `is_displayed()` checks full visibility (element must be rendered and on screen).
 
 **Read / inspect**
 
@@ -1369,6 +1380,12 @@ actions.type_if_present((BY, "search"), "query")
 actions.type_first_available([(BY, "email"), (BY, "phone")], "user@example.com")
 actions.type_text_slowly((BY, "otp"), "123456", delay_per_char=0.2)
 actions.clear((BY, "search_field"))
+
+# Assertions
+assert actions.is_displayed((BY, "welcome_screen"))
+actions.assert_displayed((BY, "submit_btn"))
+actions.assert_displayed_first_available([(BY, "ok"), (BY, "accept")])
+actions.assert_not_displayed_first_available([(BY, "loading"), (BY, "spinner")])
 
 # Read
 label = actions.text((BY, "result_label"))

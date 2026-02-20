@@ -9,6 +9,7 @@ from _pytest.stash import StashKey
 
 from appium_pytest_kit._internal.device_resolver import (
     DeviceInfo,
+    DeviceResolver,
 )
 from appium_pytest_kit._internal.diagnostics import (
     attach_to_allure,
@@ -177,6 +178,13 @@ def settings(pytestconfig: Config) -> AppiumPytestKitSettings:
 
 
 @pytest.fixture(scope="session")
+def device_info(settings) -> DeviceInfo | None:
+    """Resolved device fixture using 3-tier priority (explicit → yaml → auto-detect)."""
+
+    return DeviceResolver(settings).resolve()
+
+
+@pytest.fixture(scope="session")
 def appium_server(settings) -> AppiumServerInfo:
     """Resolved Appium server fixture with optional local lifecycle management."""
 
@@ -189,7 +197,12 @@ def appium_server(settings) -> AppiumServerInfo:
 
 
 @pytest.fixture(scope="session")
-def _driver_shared(settings, appium_server: AppiumServerInfo, request: pytest.FixtureRequest):
+def _driver_shared(
+    settings,
+    appium_server: AppiumServerInfo,
+    device_info: DeviceInfo | None,
+    request: pytest.FixtureRequest,
+):
     """Session-scoped driver for clean-session and debug modes.
 
     Yields None when session_mode is 'clean' so the function-scoped driver
@@ -200,7 +213,7 @@ def _driver_shared(settings, appium_server: AppiumServerInfo, request: pytest.Fi
         yield None
         return
 
-    config = _build_final_config(settings, appium_server, request)
+    config = _build_final_config(settings, appium_server, request, info=device_info)
     created_driver = create_driver(config)
     request.config.pluginmanager.hook.pytest_appium_pytest_kit_driver_created(
         driver=created_driver,
@@ -212,15 +225,32 @@ def _driver_shared(settings, appium_server: AppiumServerInfo, request: pytest.Fi
         created_driver.quit()
 
 
+def _apply_device_info(capabilities: dict, info: DeviceInfo) -> None:
+    """Merge DeviceInfo fields into capabilities without overwriting explicit values."""
+
+    if "deviceName" not in capabilities and info.device_name:
+        capabilities["deviceName"] = info.device_name
+    if "udid" not in capabilities and info.udid:
+        capabilities["udid"] = info.udid
+    if "platformVersion" not in capabilities and info.platform_version:
+        capabilities["platformVersion"] = info.platform_version
+    if "automationName" not in capabilities and info.automation_name:
+        capabilities["automationName"] = info.automation_name
+
+
 def _build_final_config(
     settings: AppiumPytestKitSettings,
     appium_server: AppiumServerInfo,
     request: pytest.FixtureRequest,
+    info: DeviceInfo | None = None,
 ) -> DriverConfig:
-    """Merge base capabilities with hook extensions and return final config."""
+    """Merge base capabilities with device info + hook extensions and return final config."""
 
     config = build_driver_config(settings, server_url=appium_server.url)
     capabilities = dict(config.capabilities)
+
+    if info is not None:
+        _apply_device_info(capabilities, info)
 
     for extension_caps in request.config.pluginmanager.hook.pytest_appium_pytest_kit_capabilities(
         capabilities=capabilities,
@@ -237,7 +267,7 @@ def _build_final_config(
 
 
 @pytest.fixture
-def driver(settings, appium_server: AppiumServerInfo, _driver_shared, request: pytest.FixtureRequest):  # noqa: E501
+def driver(settings, appium_server: AppiumServerInfo, device_info: DeviceInfo | None, _driver_shared, request: pytest.FixtureRequest):  # noqa: E501
     """Create and yield an Appium driver for each test function.
 
     In 'clean' mode a fresh driver is created and quit per test.
@@ -251,7 +281,7 @@ def driver(settings, appium_server: AppiumServerInfo, _driver_shared, request: p
         return
 
     # Per-test driver (clean mode)
-    final_config = _build_final_config(settings, appium_server, request)
+    final_config = _build_final_config(settings, appium_server, request, info=device_info)
     created_driver = create_driver(final_config)
     request.config.pluginmanager.hook.pytest_appium_pytest_kit_driver_created(
         driver=created_driver,

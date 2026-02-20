@@ -213,7 +213,6 @@ waiter.for_any_visible([loc1, loc2])                   # wait for first visible 
 # Platform / context
 waiter.for_context_contains("WEBVIEW")                 # wait for hybrid app webview context
 waiter.for_android_activity("MainActivity")            # wait for Android activity
-waiter.for_android_toast("Saved successfully")         # wait for Android toast message
 ```
 
 ---
@@ -235,6 +234,14 @@ actions.type_if_present_first_available([l1, l2], "text") # type into first visi
 actions.type_first_available([l1, l2], "text")            # type into first visible (raises on fail)
 actions.type_text_slowly(locator, "text", delay_per_char=0.1)  # char-by-char typing
 actions.clear(locator)                                     # clear a text field
+
+# Assertions
+actions.is_displayed(locator)                                        # bool — element is visible on screen
+actions.assert_displayed(locator)                                    # raises AssertionError if not visible
+actions.is_displayed_first_available([l1, l2])                       # bool — any locator visible
+actions.assert_displayed_first_available([l1, l2])                   # raises if none visible
+actions.not_displayed_first_available([l1, l2])                      # bool — none of the locators visible
+actions.assert_not_displayed_first_available([l1, l2])               # raises if any visible
 
 # Read
 actions.attribute(locator, "content-desc")               # read element attribute
