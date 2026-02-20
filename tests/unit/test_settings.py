@@ -1,7 +1,9 @@
 
 from pathlib import Path
 
-from appium_pytest_kit.settings import apply_cli_overrides, load_settings
+import pytest
+
+from appium_pytest_kit.settings import AppiumPytestKitSettings, apply_cli_overrides, load_settings
 
 
 def test_load_settings_from_env_file(tmp_path: Path) -> None:
@@ -40,3 +42,34 @@ def test_cli_overrides_are_highest_precedence(tmp_path: Path) -> None:
     assert base.platform == "ios"
     assert merged.platform == "android"
     assert merged.appium_url == "http://127.0.0.1:4725"
+
+
+def test_cli_overrides_accept_camel_case_keys() -> None:
+    base = AppiumPytestKitSettings()
+    merged = apply_cli_overrides(base, {"noReset": "true"})
+    assert merged.no_reset is True
+
+
+def test_cli_overrides_unknown_keys_become_capabilities_in_default_mode() -> None:
+    base = AppiumPytestKitSettings()
+    merged = apply_cli_overrides(base, {"autoGrantPermissions": "true"})
+    assert merged.capabilities_json["autoGrantPermissions"] is True
+
+
+def test_cli_overrides_reject_unknown_keys_in_strict_mode() -> None:
+    base = AppiumPytestKitSettings(strict_config=True)
+    with pytest.raises(ValueError, match="unknownField"):
+        apply_cli_overrides(base, {"unknownField": "x"})
+
+
+def test_strict_mode_rejects_unknown_capabilities_json_key() -> None:
+    with pytest.raises(ValueError, match="unknown capability key"):
+        AppiumPytestKitSettings(strict_config=True, capabilities_json={"totallyUnknownCap": True})
+
+
+def test_strict_mode_allows_namespaced_capabilities() -> None:
+    settings = AppiumPytestKitSettings(
+        strict_config=True,
+        capabilities_json={"appium:customCap": "x"},
+    )
+    assert settings.capabilities_json["appium:customCap"] == "x"

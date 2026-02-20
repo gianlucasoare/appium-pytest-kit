@@ -2,12 +2,122 @@
 
 
 import json
+import re
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_KNOWN_CAPABILITY_KEYS: set[str] = {
+    # W3C / core
+    "platformName",
+    "automationName",
+    "newCommandTimeout",
+    "deviceName",
+    "platformVersion",
+    "udid",
+    "app",
+    "noReset",
+    "fullReset",
+    # Android
+    "appPackage",
+    "appActivity",
+    "appWaitActivity",
+    "appWaitPackage",
+    "appWaitDuration",
+    "autoGrantPermissions",
+    "adbExecTimeout",
+    "systemPort",
+    "chromedriverExecutable",
+    "chromedriverArgs",
+    "unicodeKeyboard",
+    "resetKeyboard",
+    "autoWebview",
+    "autoWebviewTimeout",
+    # iOS
+    "bundleId",
+    "autoAcceptAlerts",
+    "wdaLocalPort",
+    "showXcodeLog",
+    "useNewWDA",
+    "wdaStartupRetries",
+    "wdaStartupRetryInterval",
+    "webkitDebugProxyPort",
+    "xcodeOrgId",
+    "xcodeSigningId",
+    "updatedWDABundleId",
+    "connectHardwareKeyboard",
+    "simpleIsVisibleCheck",
+    "forceAppLaunch",
+    "shouldTerminateApp",
+    # Common extra caps
+    "language",
+    "locale",
+}
+
+
+def _is_known_capability_key(key: str) -> bool:
+    normalized = key.strip()
+    if not normalized:
+        return False
+    # Namespaced extension capabilities are valid by definition.
+    if ":" in normalized:
+        return True
+    return normalized in _KNOWN_CAPABILITY_KEYS
+
+
+def _unknown_capability_keys(capabilities: Mapping[str, Any]) -> list[str]:
+    unknown = [str(key) for key in capabilities.keys() if not _is_known_capability_key(str(key))]
+    return sorted(set(unknown))
+
+
+def validate_capabilities_for_strict(capabilities: Mapping[str, Any], *, strict: bool) -> None:
+    """Validate capability key names when strict config mode is enabled."""
+
+    if not strict:
+        return
+    unknown = _unknown_capability_keys(capabilities)
+    if not unknown:
+        return
+    rendered = ", ".join(repr(key) for key in unknown)
+    msg = (
+        "Strict config rejected unknown capability key(s): "
+        f"{rendered}. Use standard Appium names or vendor-prefixed keys (e.g. 'appium:foo')."
+    )
+    raise ValueError(msg)
+
+
+def _normalize_capability_key(raw_key: str) -> str:
+    key = raw_key.strip()
+    # Allow env-style capability names in --app-override:
+    # APP_AUTO_GRANT_PERMISSIONS -> autoGrantPermissions
+    if key.upper().startswith("APP_"):
+        tail = key[4:]
+        parts = [part for part in tail.lower().split("_") if part]
+        if parts:
+            return parts[0] + "".join(part.title() for part in parts[1:])
+    return key
+
+
+def _coerce_capability_value(raw: Any) -> Any:
+    if not isinstance(raw, str):
+        return raw
+    payload = raw.strip()
+    if payload == "":
+        return raw
+    try:
+        return json.loads(payload)
+    except ValueError:
+        lowered = payload.lower()
+        if lowered == "true":
+            return True
+        if lowered == "false":
+            return False
+        if lowered in {"null", "none"}:
+            return None
+        return raw
 
 
 class AppiumPytestKitSettings(BaseSettings):
@@ -55,8 +165,8 @@ class AppiumPytestKitSettings(BaseSettings):
                           (default; maximum isolation, slower due to session startup overhead).
     - ``clean-session`` — a single Appium session is shared across the whole test suite and
                           quit once at the end (faster, but tests share driver state).
-    - ``debug``         — same as ``clean-session`` but the session is kept alive even when a
-                          test fails so you can inspect the device after a failure.
+    - ``debug``         — same as ``clean-session``; failures do not restart the session,
+                          and it is still quit automatically at session end.
     """
 
     explicit_wait_timeout: float = 10.0
@@ -71,6 +181,7 @@ class AppiumPytestKitSettings(BaseSettings):
     is_simulator: bool = False
     video_policy: Literal["always", "failed", "never"] = "never"
     artifacts_dir: Path = Path("artifacts")
+    strict_config: bool = False
 
     reporting_enabled: bool = False
     report_dir: Path = Path("artifacts/appium-pytest-kit")
@@ -118,6 +229,11 @@ class AppiumPytestKitSettings(BaseSettings):
         msg = "capabilities_json must be a JSON object string or mapping"
         raise TypeError(msg)
 
+    @model_validator(mode="after")
+    def _validate_strict_capabilities(self) -> "AppiumPytestKitSettings":
+        validate_capabilities_for_strict(self.capabilities_json, strict=self.strict_config)
+        return self
+
 
 def load_settings(*, env_file: str | Path | None = None) -> AppiumPytestKitSettings:
     """Load framework settings from defaults + .env + env vars."""
@@ -128,10 +244,12 @@ def load_settings(*, env_file: str | Path | None = None) -> AppiumPytestKitSetti
 
 
 def _normalize_setting_name(name: str) -> str:
-    normalized = name.strip().lower().replace("-", "_")
-    if normalized.startswith("app_"):
-        normalized = normalized.removeprefix("app_")
-    return normalized
+    normalized = name.strip().replace("-", "_")
+    if normalized.lower().startswith("app_"):
+        normalized = normalized[4:]
+    # Accept camelCase/PascalCase (e.g. noReset) as well as snake_case.
+    normalized = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", normalized)
+    return normalized.lower()
 
 
 def apply_cli_overrides(
@@ -141,8 +259,39 @@ def apply_cli_overrides(
     """Apply highest-precedence CLI overrides on top of loaded settings."""
 
     merged = settings.model_dump(mode="python")
+    known_fields = set(AppiumPytestKitSettings.model_fields.keys())
+    pending_capability_overrides: list[tuple[str, Any]] = []
+
     for raw_key, raw_value in overrides.items():
         if raw_value is None:
             continue
-        merged[_normalize_setting_name(raw_key)] = raw_value
+        key = _normalize_setting_name(raw_key)
+        if key not in known_fields:
+            pending_capability_overrides.append((raw_key, raw_value))
+            continue
+        merged[key] = raw_value
+
+    # Resolve strict mode after setting overrides have been applied, so
+    # APP_STRICT_CONFIG can be toggled from the same CLI invocation.
+    strict_mode = bool(AppiumPytestKitSettings.model_validate(merged).strict_config)
+    capability_overrides = dict(merged.get("capabilities_json") or {})
+    unknown_capability_keys: list[str] = []
+
+    for raw_key, raw_value in pending_capability_overrides:
+        capability_key = _normalize_capability_key(raw_key)
+        if strict_mode and not _is_known_capability_key(capability_key):
+            unknown_capability_keys.append(raw_key)
+            continue
+        capability_overrides[capability_key] = _coerce_capability_value(raw_value)
+
+    if unknown_capability_keys:
+        rendered = ", ".join(repr(key) for key in unknown_capability_keys)
+        msg = (
+            "Unknown appium-pytest-kit override(s) in strict mode: "
+            f"{rendered}. Use declared setting names or valid capability keys."
+        )
+        raise ValueError(msg)
+
+    merged["capabilities_json"] = capability_overrides
+
     return AppiumPytestKitSettings.model_validate(merged)

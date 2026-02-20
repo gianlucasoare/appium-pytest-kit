@@ -280,7 +280,7 @@ pytest session start
           ║                                                             ║
           ║    test runs                                                ║
           ║                                                             ║
-          ║ [on failure] capture screenshot + page source               ║
+          ║ [on failure] capture screenshot + page source + device logs ║
           ║ [on failure/always] save video recording                    ║
           ║ driver.quit()                                               ║
           ╚═════════════════════════════════════════════════════════════╝

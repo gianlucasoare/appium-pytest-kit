@@ -312,6 +312,100 @@ class TestPressKeycode:
 
 
 # ---------------------------------------------------------------------------
+# App lifecycle / deep links
+# ---------------------------------------------------------------------------
+
+class TestAppLifecycle:
+    def test_activate_app_calls_driver(self) -> None:
+        actions, driver = _make_actions()
+        actions.activate_app("com.example.app")
+        driver.activate_app.assert_called_once_with("com.example.app")
+
+    def test_terminate_app_calls_driver(self) -> None:
+        actions, driver = _make_actions()
+        actions.terminate_app("com.example.app")
+        driver.terminate_app.assert_called_once_with("com.example.app")
+
+    def test_background_app_calls_driver(self) -> None:
+        actions, driver = _make_actions()
+        actions.background_app(2.9)
+        driver.background_app.assert_called_once_with(2)
+
+    def test_lifecycle_methods_raise_action_error_on_exception(self) -> None:
+        from selenium.common.exceptions import WebDriverException
+
+        actions, driver = _make_actions()
+        driver.activate_app.side_effect = WebDriverException("fail")
+        driver.terminate_app.side_effect = WebDriverException("fail")
+        driver.background_app.side_effect = WebDriverException("fail")
+
+        with pytest.raises(ActionError) as exc:
+            actions.activate_app("com.example")
+        assert exc.value.action == "activate_app"
+
+        with pytest.raises(ActionError) as exc:
+            actions.terminate_app("com.example")
+        assert exc.value.action == "terminate_app"
+
+        with pytest.raises(ActionError) as exc:
+            actions.background_app(1)
+        assert exc.value.action == "background_app"
+
+
+class TestOpenDeepLink:
+    def test_android_uses_app_package_from_capabilities(self) -> None:
+        actions, driver = _make_actions()
+        driver.capabilities = {"platformName": "Android", "appPackage": "com.example.app"}
+
+        actions.open_deep_link("myapp://profile")
+
+        driver.execute_script.assert_called_once_with(
+            "mobile: deepLink",
+            {"url": "myapp://profile", "package": "com.example.app"},
+        )
+
+    def test_ios_uses_bundle_id_from_capabilities(self) -> None:
+        actions, driver = _make_actions()
+        driver.capabilities = {"platformName": "iOS", "bundleId": "com.example.ios"}
+
+        actions.open_deep_link("myapp://settings")
+
+        driver.execute_script.assert_called_once_with(
+            "mobile: deepLink",
+            {"url": "myapp://settings", "bundleId": "com.example.ios"},
+        )
+
+    def test_explicit_app_id_overrides_capabilities(self) -> None:
+        actions, driver = _make_actions()
+        driver.capabilities = {"platformName": "android", "appPackage": "com.old.app"}
+
+        actions.open_deep_link("myapp://home", app_id="com.new.app")
+
+        driver.execute_script.assert_called_once_with(
+            "mobile: deepLink",
+            {"url": "myapp://home", "package": "com.new.app"},
+        )
+
+    def test_raises_when_required_capability_is_missing(self) -> None:
+        actions, driver = _make_actions()
+        driver.capabilities = {"platformName": "android"}
+
+        with pytest.raises(ActionError, match="requires Android package"):
+            actions.open_deep_link("myapp://home")
+
+    def test_raises_on_driver_error(self) -> None:
+        from selenium.common.exceptions import WebDriverException
+
+        actions, driver = _make_actions()
+        driver.capabilities = {"platformName": "android", "appPackage": "com.example.app"}
+        driver.execute_script.side_effect = WebDriverException("boom")
+
+        with pytest.raises(ActionError) as exc_info:
+            actions.open_deep_link("myapp://home")
+        assert exc_info.value.action == "open_deep_link"
+
+
+# ---------------------------------------------------------------------------
 # Context / WebView
 # ---------------------------------------------------------------------------
 

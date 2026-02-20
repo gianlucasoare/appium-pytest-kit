@@ -18,7 +18,7 @@ appium-pytest-kit-init --framework --root my-project
 | | |
 |---|---|
 | **Zero-config fixtures** | `driver`, `waiter`, `actions`, `page_factory` — just add to your test function |
-| **Auto failure artifacts** | Screenshot + page source captured automatically on every failure |
+| **Auto failure artifacts** | Screenshot + page source + device logs captured automatically on failure |
 | **3-tier device resolution** | explicit settings → named profile → auto-detect via adb/xcrun |
 | **Session modes** | `clean` (per-test) · `clean-session` (shared) · `debug` (keep alive) |
 | **Retry support** | Session reused across retry attempts — no restart cost between tries |
@@ -189,14 +189,14 @@ See [docs/page-objects.md](docs/page-objects.md) for the full guide.
 ```env
 APP_SESSION_MODE=clean          # fresh driver per test (default)
 APP_SESSION_MODE=clean-session  # one shared driver for the whole run (faster)
-APP_SESSION_MODE=debug          # shared + keep alive on failure (local debugging)
+APP_SESSION_MODE=debug          # shared + no restart on failure (local debugging)
 ```
 
 ---
 
 ## Retry support
 
-Install the extra, then use `@pytest.mark.retry` or the `--retry` CLI flag:
+Install the extra, then use `@pytest.mark.flaky(...)` and/or the `--retries` CLI flag:
 
 ```bash
 pip install "appium-pytest-kit[retry]"
@@ -240,6 +240,7 @@ pytest   # auto-detect if nothing set
 On test failure the framework automatically captures:
 - **Screenshot** → `artifacts/screenshots/<test_id>.png`
 - **Page source** → `artifacts/pagesource/<test_id>.xml`
+- **Device logs** → `artifacts/device_logs/<test_id>.log`
 - **Video** (if configured) → `artifacts/videos/<test_id>.mp4`
 
 ```env
@@ -258,12 +259,13 @@ Settings load from `.env` → env vars → CLI flags (highest wins).
 ```bash
 pytest --app-platform ios
 pytest --app-device-name "Pixel 7" --app-platform-version 14
-pytest --appium-url http://192.168.1.10:4723
+pytest --app-appium-url http://192.168.1.10:4723
 pytest --app-session-mode clean-session
 pytest --app-device-profile pixel7
 pytest --app-video-policy failed
 pytest --app-override APP_EXPLICIT_WAIT_TIMEOUT=15
 pytest --app-capabilities-json '{"autoGrantPermissions": true}'
+pytest --app-strict-config
 pytest --app-manage-appium-server
 pytest --app-reporting-enabled
 
@@ -365,6 +367,12 @@ actions.scroll_to_element(locator)
 # Keyboard
 actions.hide_keyboard()
 actions.press_keycode(66)  # ENTER
+
+# App lifecycle
+actions.activate_app("com.example.myapp")
+actions.terminate_app("com.example.myapp")
+actions.background_app(2)
+actions.open_deep_link("myapp://profile", app_id="com.example.myapp")
 
 # Hybrid
 actions.switch_to_webview()

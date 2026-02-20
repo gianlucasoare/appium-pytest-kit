@@ -183,3 +183,4 @@ class TestWaitTimeoutErrorContext:
                 waiter.for_visibility(("id", "btn"), timeout=0.1)
 
         assert exc_info.value.timeout == 0.1
+        assert exc_info.value.locator == ("id", "btn")

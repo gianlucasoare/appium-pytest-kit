@@ -744,6 +744,77 @@ class MobileActions:
             ) from exc
 
     # ------------------------------------------------------------------
+    # App lifecycle / deep links
+    # ------------------------------------------------------------------
+
+    def activate_app(self, app_id: str) -> None:
+        """Bring an installed app to foreground by package/bundle id."""
+
+        logger.debug("activate_app  %s", app_id)
+        try:
+            self._driver.activate_app(app_id)
+        except WebDriverException as exc:
+            raise ActionError(
+                f"activate_app({app_id!r}) failed",
+                action="activate_app",
+            ) from exc
+
+    def terminate_app(self, app_id: str) -> None:
+        """Terminate an installed app by package/bundle id."""
+
+        logger.debug("terminate_app  %s", app_id)
+        try:
+            self._driver.terminate_app(app_id)
+        except WebDriverException as exc:
+            raise ActionError(
+                f"terminate_app({app_id!r}) failed",
+                action="terminate_app",
+            ) from exc
+
+    def background_app(self, seconds: float = 1.0) -> None:
+        """Send app to background for *seconds* and return it to foreground."""
+
+        logger.debug("background_app  %.1fs", seconds)
+        try:
+            self._driver.background_app(int(seconds))
+        except WebDriverException as exc:
+            raise ActionError(
+                f"background_app({seconds!r}) failed",
+                action="background_app",
+            ) from exc
+
+    def open_deep_link(self, url: str, *, app_id: str | None = None) -> None:
+        """Open a deep link via Appium mobile command."""
+
+        capabilities = getattr(self._driver, "capabilities", {}) or {}
+        platform = str(capabilities.get("platformName", "")).lower()
+
+        if platform == "android":
+            package = app_id or capabilities.get("appPackage")
+            if not package:
+                msg = "open_deep_link requires Android package (app_id or appPackage capability)"
+                raise ActionError(msg, action="open_deep_link")
+            payload = {"url": url, "package": package}
+        elif platform == "ios":
+            bundle_id = app_id or capabilities.get("bundleId")
+            if not bundle_id:
+                msg = "open_deep_link requires iOS bundle id (app_id or bundleId capability)"
+                raise ActionError(msg, action="open_deep_link")
+            payload = {"url": url, "bundleId": bundle_id}
+        else:
+            msg = f"open_deep_link is not supported for platform: {platform or 'unknown'}"
+            raise ActionError(msg, action="open_deep_link")
+
+        logger.debug("open_deep_link  %s  app_id=%s", url, app_id or "auto")
+        try:
+            self._driver.execute_script("mobile: deepLink", payload)
+        except WebDriverException as exc:
+            raise ActionError(
+                f"open_deep_link({url!r}) failed",
+                action="open_deep_link",
+            ) from exc
+
+    # ------------------------------------------------------------------
     # Context switching (hybrid apps)
     # ------------------------------------------------------------------
 

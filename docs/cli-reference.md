@@ -74,7 +74,7 @@ pytest --app-platform ios
 
 ```bash
 # Point to a remote Appium server
-pytest --appium-url http://192.168.1.50:4723
+pytest --app-appium-url http://192.168.1.50:4723
 
 # Let the kit start and stop Appium automatically
 pytest --app-manage-appium-server
@@ -85,7 +85,8 @@ pytest --no-app-manage-appium-server
 
 | Flag | Description |
 |---|---|
-| `--appium-url URL` | Appium server URL (default: `http://127.0.0.1:4723`) |
+| `--app-appium-url URL` | Appium server URL (default: `http://127.0.0.1:4723`) |
+| `--appium-url URL` | Legacy alias for `--app-appium-url` |
 | `--app-manage-appium-server` | Start a local Appium server automatically |
 | `--no-app-manage-appium-server` | Do not start a local Appium server |
 
@@ -253,6 +254,23 @@ pytest --no-app-reporting-enabled
 
 ---
 
+### Strict configuration
+
+```bash
+# Fail fast on unknown --app-override keys and unknown capability keys
+pytest --app-strict-config
+
+# Disable strict validation explicitly
+pytest --no-app-strict-config
+```
+
+| Flag | Description |
+|---|---|
+| `--app-strict-config` | Enable strict configuration validation |
+| `--no-app-strict-config` | Disable strict configuration validation |
+
+---
+
 ### Logging
 
 `appium-pytest-kit` emits structured log messages through Python's standard
@@ -310,6 +328,7 @@ logging.getLogger("appium_pytest_kit").setLevel(logging.WARNING)
 | `INFO` | `pytest_plugin` | `retry:keep-alive  attempt=1/2  node=...` |
 | `INFO` | `pytest_plugin` | `driver:quit  session=4f2a1b  node=...` |
 | `INFO` | `pytest_plugin` | `artifact:screenshot  artifacts/screenshots/test_foo.png` |
+| `INFO` | `pytest_plugin` | `artifact:device_logs  artifacts/device_logs/test_foo.log` |
 | `INFO` | `pytest_plugin` | `artifact:video  artifacts/videos/test_foo.mp4` |
 | `INFO` | `_internal.device_resolver` | `device:tier-1 (explicit)  name='Pixel 7'  udid=emulator-5554` |
 | `INFO` | `_internal.server` | `server:starting  host=127.0.0.1  port=4723  timeout=30000ms` |
@@ -340,7 +359,12 @@ pytest \
   --app-override APP_NO_RESET=true
 ```
 
-Format: `KEY=VALUE` where KEY is the full `APP_*` environment variable name.
+Format: `KEY=VALUE` where KEY can be:
+- a full `APP_*` setting name (for example `APP_EXPLICIT_WAIT_TIMEOUT`)
+- a setting field name (for example `noReset`)
+- a capability key (for example `autoGrantPermissions`)
+
+When strict mode is enabled (`--app-strict-config`), unknown capability keys are rejected.
 
 ---
 
@@ -490,7 +514,7 @@ pytest --app-platform ios --app-device-profile iphone15_sim
 ### Point to a staging Appium server
 
 ```bash
-pytest --appium-url http://10.0.1.100:4723 --app-platform android
+pytest --app-appium-url http://10.0.1.100:4723 --app-platform android
 ```
 
 ### Faster suite with a shared driver session

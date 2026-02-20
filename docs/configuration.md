@@ -85,6 +85,7 @@ pytest --app-env-file /path/to/staging.env
 | `APP_IMPLICIT_WAIT` | `implicit_wait` | `float` | `0.0` | Appium-level implicit wait in seconds (keep at 0 and use explicit waits instead) |
 | `APP_EXPLICIT_WAIT_TIMEOUT` | `explicit_wait_timeout` | `float` | `10.0` | Default timeout for `Waiter` and `MobileActions` explicit waits |
 | `APP_CAPABILITIES_JSON` | `capabilities_json` | JSON object | `{}` | Extra capabilities merged last — takes highest precedence |
+| `APP_STRICT_CONFIG` | `strict_config` | `bool` | `false` | Fail fast on unknown override keys and unknown capability keys |
 
 ### Artifacts and reporting
 
@@ -158,7 +159,8 @@ pytest --app-is-simulator
 pytest --app-manage-appium-server
 pytest --app-reporting-enabled
 pytest --app-capabilities-json '{"autoGrantPermissions": true}'
-pytest --app-explicit-wait-timeout 15
+pytest --app-override APP_EXPLICIT_WAIT_TIMEOUT=15
+pytest --app-strict-config
 ```
 
 For any setting without a named flag, use `--app-override`:
@@ -171,6 +173,12 @@ pytest --app-override noReset=true --app-override autoGrantPermissions=true
 `--app-override` accepts `KEY=VALUE` in any of these forms:
 - `APP_FIELD_NAME=value` — env-style, `APP_` prefix stripped automatically
 - `field_name=value` — Python field name
+
+In strict mode, unknown keys raise a pytest usage error so typos are caught early.
+
+When strict mode is disabled (default), unknown `--app-override` keys are treated as
+capability overrides (for example `--app-override autoGrantPermissions=true`).
+Enable strict mode to fail on unknown capability keys.
 
 ---
 

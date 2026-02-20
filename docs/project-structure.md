@@ -41,6 +41,7 @@ my-app-tests/
 └── artifacts/                  # auto-created on failure — do not commit
     ├── screenshots/
     ├── pagesource/
+    ├── device_logs/
     └── videos/
 ```
 

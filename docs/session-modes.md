@@ -70,7 +70,7 @@ def reset_to_home(actions, home_page):
 
 ### `debug`
 
-Same as `clean-session` (one shared session) but the session is **kept alive after a failure** — it is never quit automatically.
+Same as `clean-session` (one shared session) but the session is **kept alive after failures during the run**. It is still quit automatically at session end.
 
 ```env
 APP_SESSION_MODE=debug
@@ -78,7 +78,7 @@ APP_SESSION_MODE=debug
 
 **Use when:**
 - Debugging a flaky or failing test locally
-- You want to inspect the device state after the test fails
+- You want to keep the same session across failures during a debug run
 
 **Trade-off:** The app/session is never reset. Useful only for local debugging — not suitable for CI.
 
@@ -87,7 +87,7 @@ APP_SESSION_MODE=debug
 Test 1: [test] → ✓
 Test 2: [test] → ✗ FAIL  ← session kept alive, you can inspect the device
 Test 3: [test]
-[session may or may not be quit at end]
+[quit session at end]
 ```
 
 ---

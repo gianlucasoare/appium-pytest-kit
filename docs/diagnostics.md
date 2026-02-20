@@ -10,7 +10,8 @@ On any test that fails in the `call` phase, the framework automatically runs:
 
 1. **Screenshot** → `artifacts/screenshots/<test_id>.png`
 2. **Page source** → `artifacts/pagesource/<test_id>.xml`
-3. **Video** (if policy allows) → `artifacts/videos/<test_id>.mp4`
+3. **Device logs** → `artifacts/device_logs/<test_id>.log` (`adb logcat` / iOS logs)
+4. **Video** (if policy allows) → `artifacts/videos/<test_id>.mp4`
 
 This happens without any configuration — the default `artifacts_dir` is `artifacts/`.
 
@@ -33,9 +34,16 @@ artifacts/
 │   └── tests__test_login__test_wrong_password.png
 ├── pagesource/
 │   └── tests__test_login__test_wrong_password.xml
+├── device_logs/
+│   └── tests__test_login__test_wrong_password.log
 └── videos/
     └── tests__test_login__test_wrong_password.mp4
 ```
+
+Device log capture is best-effort and depends on platform tools:
+- Android: `adb logcat -d`
+- iOS Simulator: `xcrun simctl spawn <udid|booted> log show --last 15m`
+- iOS real device: tries `xcrun devicectl ...` / `idevicesyslog` when available
 
 ---
 
@@ -66,7 +74,7 @@ Physical iOS devices and all Android devices/emulators support recording.
 
 ## Allure integration
 
-When `allure-pytest` is installed, screenshots and page source are automatically attached to Allure reports — no configuration required.
+When `allure-pytest` is installed, screenshots, page source, and device logs are automatically attached to Allure reports — no configuration required.
 
 ### Install Allure support
 
@@ -83,7 +91,7 @@ pytest --alluredir=allure-results
 allure serve allure-results
 ```
 
-Allure will show screenshots and page source inline in the test report for every failing test.
+Allure will show screenshots, page source, and device logs in the test report for every failing test.
 
 If `allure-pytest` is not installed, Allure attachment is silently skipped — no error or warning.
 

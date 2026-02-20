@@ -160,7 +160,7 @@ try:
 except WaitTimeoutError as exc:
     print(exc.locator)   # ("id", "missing_btn")
     print(exc.timeout)   # 5.0
-    print(str(exc))      # "Element not visible: ('id', 'missing_btn') (timeout=5.0s)"
+    print(str(exc))      # includes locator and timeout context
 ```
 
 Use it in tests to provide a clear skip or failure message:

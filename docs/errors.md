@@ -107,7 +107,7 @@ try:
 except WaitTimeoutError as exc:
     print(exc.locator)   # ("id", "submit_btn")
     print(exc.timeout)   # 5.0
-    print(str(exc))      # "Element not visible: ('id', 'submit_btn') (timeout=5.0s)"
+    print(str(exc))      # includes locator and timeout context
 ```
 
 **In tests — skip vs fail:**

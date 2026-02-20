@@ -510,6 +510,44 @@ actions.press_keycode(67)  # BACKSPACE
 
 ---
 
+## App lifecycle / deep links
+
+### `activate_app(app_id)`
+
+Bring an installed app to foreground by package (Android) or bundle id (iOS).
+
+```python
+actions.activate_app("com.example.myapp")
+```
+
+### `terminate_app(app_id)`
+
+Terminate an installed app by package/bundle id.
+
+```python
+actions.terminate_app("com.example.myapp")
+```
+
+### `background_app(seconds=1.0)`
+
+Send app to background for the given number of seconds and return it to foreground.
+
+```python
+actions.background_app(2)
+```
+
+### `open_deep_link(url, *, app_id=None)`
+
+Open a deep link via Appium's mobile command.
+- Android uses `package` (from `app_id` or `appPackage` capability)
+- iOS uses `bundleId` (from `app_id` or `bundleId` capability)
+
+```python
+actions.open_deep_link("myapp://profile", app_id="com.example.myapp")
+```
+
+---
+
 ## Hybrid / WebView context
 
 Use these for apps that embed a web view alongside native content.

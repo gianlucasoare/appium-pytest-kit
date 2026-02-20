@@ -43,6 +43,7 @@ class Waiter:
         *,
         timeout: float | None = None,
         message: str = "",
+        locator: Locator | None = None,
     ) -> ConditionResult:
         """Wait until a custom condition is truthy and return its value."""
 
@@ -57,6 +58,7 @@ class Waiter:
         except TimeoutException as exc:
             raise WaitTimeoutError(
                 message or "Explicit wait timed out",
+                locator=locator,
                 timeout=effective_timeout,
             ) from exc
 
@@ -69,6 +71,7 @@ class Waiter:
             ec.presence_of_element_located(locator),
             timeout=timeout,
             message=f"Element not present: {locator}",
+            locator=locator,
         )
 
     def for_visibility(self, locator: Locator, *, timeout: float | None = None):
@@ -80,6 +83,7 @@ class Waiter:
             ec.visibility_of_element_located(locator),
             timeout=timeout,
             message=f"Element not visible: {locator}",
+            locator=locator,
         )
 
     def for_clickable(self, locator: Locator, *, timeout: float | None = None):
@@ -91,6 +95,7 @@ class Waiter:
             ec.element_to_be_clickable(locator),
             timeout=timeout,
             message=f"Element not clickable: {locator}",
+            locator=locator,
         )
 
     def for_invisibility(self, locator: Locator, *, timeout: float | None = None) -> bool:
@@ -102,6 +107,7 @@ class Waiter:
             ec.invisibility_of_element_located(locator),
             timeout=timeout,
             message=f"Element still visible: {locator}",
+            locator=locator,
         )
 
     def for_text_contains(
@@ -119,6 +125,7 @@ class Waiter:
             ec.text_to_be_present_in_element(locator, text),
             timeout=timeout,
             message=f"Text {text!r} not found in element: {locator}",
+            locator=locator,
         )
 
     def for_text_equals(
@@ -144,6 +151,7 @@ class Waiter:
             _exact_match,
             timeout=timeout,
             message=f"Text {text!r} not matched in element: {locator}",
+            locator=locator,
         )
 
     def for_all_visible(

@@ -56,6 +56,11 @@ APP_APPIUM_BASE_PATH=/
 # Extra Appium capabilities as a JSON object, e.g. {"wdaLocalPort": 8100}.
 APP_CAPABILITIES_JSON={}
 
+# Strict config mode:
+#   false - unknown --app-override keys become capability overrides (default)
+#   true  - unknown --app-override keys fail fast; unknown capability keys fail validation
+APP_STRICT_CONFIG=false
+
 # Driver session lifecycle strategy:
 #   clean         - fresh driver per test (default; maximum isolation)
 #   clean-session - one shared driver for the whole suite (faster)

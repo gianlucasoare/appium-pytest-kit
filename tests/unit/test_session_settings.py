@@ -65,3 +65,15 @@ def test_is_simulator_default() -> None:
 def test_device_profile_default() -> None:
     s = AppiumPytestKitSettings()
     assert s.device_profile is None
+
+
+def test_strict_config_default() -> None:
+    s = AppiumPytestKitSettings()
+    assert s.strict_config is False
+
+
+def test_strict_config_from_env(tmp_path: Path) -> None:
+    env = tmp_path / ".env"
+    env.write_text("APP_STRICT_CONFIG=true\n", encoding="utf-8")
+    s = load_settings(env_file=env)
+    assert s.strict_config is True

@@ -15,6 +15,7 @@ from appium_pytest_kit._internal.device_resolver import (
 )
 from appium_pytest_kit._internal.diagnostics import (
     attach_to_allure,
+    capture_device_logs,
     capture_page_source,
     capture_screenshot,
 )
@@ -23,8 +24,14 @@ from appium_pytest_kit._internal.server import AppiumServerInfo, AppiumServerMan
 from appium_pytest_kit._internal.video import ScreenRecorder
 from appium_pytest_kit.actions import MobileActions
 from appium_pytest_kit.driver import DriverConfig, build_driver_config, create_driver
+from appium_pytest_kit.errors import ConfigurationError
 from appium_pytest_kit.hooks import AppiumPytestKitHookSpecs
-from appium_pytest_kit.settings import AppiumPytestKitSettings, apply_cli_overrides, load_settings
+from appium_pytest_kit.settings import (
+    AppiumPytestKitSettings,
+    apply_cli_overrides,
+    load_settings,
+    validate_capabilities_for_strict,
+)
 from appium_pytest_kit.waits import Waiter
 
 logger = logging.getLogger(__name__)
@@ -38,6 +45,8 @@ DEVICE_INFO_KEY: StashKey[DeviceInfo | None] = StashKey()
 # Retry-aware session reuse.
 # Maps nodeid -> live driver so retries reuse the same Appium session.
 RETRY_DRIVER_REGISTRY_KEY: StashKey[dict[str, Any]] = StashKey()
+# Maps nodeid -> recorder created for the first attempt.
+RETRY_RECORDER_REGISTRY_KEY: StashKey[dict[str, ScreenRecorder | None]] = StashKey()
 # Maps nodeid -> number of call-phase failures seen so far.
 RETRY_FAIL_COUNT_KEY: StashKey[dict[str, int]] = StashKey()
 # Set on a node's stash when the driver must survive the current teardown
@@ -84,7 +93,14 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
     group.addoption("--app-env-file", action="store", default=None)
     group.addoption("--app-platform", action="store", default=None)
-    group.addoption("--appium-url", action="store", default=None)
+    group.addoption(
+        "--app-appium-url",
+        "--appium-url",
+        action="store",
+        default=None,
+        dest="appium_url",
+        help="Appium server URL. Prefer --app-appium-url; --appium-url is kept as an alias.",
+    )
     group.addoption("--app-device-name", action="store", default=None)
     group.addoption("--app-platform-version", action="store", default=None)
     group.addoption("--app-udid", action="store", default=None)
@@ -100,6 +116,18 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     group.addoption("--app-video-policy", action="store", default=None)
     group.addoption("--app-artifacts-dir", action="store", default=None)
 
+    group.addoption(
+        "--app-strict-config",
+        action="store_true",
+        default=None,
+        dest="app_strict_config",
+    )
+    group.addoption(
+        "--no-app-strict-config",
+        action="store_false",
+        default=None,
+        dest="app_strict_config",
+    )
     group.addoption(
         "--app-manage-appium-server",
         action="store_true",
@@ -188,6 +216,7 @@ def _collect_cli_overrides(config: Config) -> dict[str, Any]:
             "app_video_policy": config.getoption("app_video_policy"),
             "app_artifacts_dir": config.getoption("app_artifacts_dir"),
             "app_is_simulator": config.getoption("app_is_simulator"),
+            "app_strict_config": config.getoption("app_strict_config"),
         }.items()
         if value is not None
     }
@@ -204,7 +233,10 @@ def pytest_configure(config: Config) -> None:
 
     env_file = config.getoption("app_env_file")
     settings = load_settings(env_file=env_file)
-    settings = apply_cli_overrides(settings, _collect_cli_overrides(config))
+    try:
+        settings = apply_cli_overrides(settings, _collect_cli_overrides(config))
+    except ValueError as exc:
+        raise pytest.UsageError(str(exc)) from exc
 
     maybe_replacement = config.pluginmanager.hook.pytest_appium_pytest_kit_configure_settings(
         settings=settings
@@ -214,6 +246,7 @@ def pytest_configure(config: Config) -> None:
 
     config.stash[SETTINGS_KEY] = settings
     config.stash[RETRY_DRIVER_REGISTRY_KEY] = {}
+    config.stash[RETRY_RECORDER_REGISTRY_KEY] = {}
     config.stash[RETRY_FAIL_COUNT_KEY] = {}
 
     if settings.reporting_enabled:
@@ -319,6 +352,11 @@ def _build_final_config(
         if extension_caps:
             capabilities.update(dict(extension_caps))
 
+    try:
+        validate_capabilities_for_strict(capabilities, strict=settings.strict_config)
+    except ValueError as exc:
+        raise ConfigurationError(str(exc)) from exc
+
     return DriverConfig(
         server_url=config.server_url,
         capabilities=capabilities,
@@ -349,6 +387,9 @@ def driver(settings, appium_server: AppiumServerInfo, device_info: DeviceInfo | 
         return
 
     registry: dict[str, Any] = request.config.stash[RETRY_DRIVER_REGISTRY_KEY]
+    recorder_registry: dict[str, ScreenRecorder | None] = request.config.stash[
+        RETRY_RECORDER_REGISTRY_KEY
+    ]
     nodeid: str = request.node.nodeid
 
     # Reset the keep-alive flag so a value from the previous attempt on this
@@ -364,7 +405,9 @@ def driver(settings, appium_server: AppiumServerInfo, device_info: DeviceInfo | 
             getattr(active_driver, "session_id", "?"),
             nodeid,
         )
-        request.node.stash[RECORDER_KEY] = None  # video handled by first attempt
+        # Keep the recorder created for the first attempt so final artifact
+        # capture on pass/final-fail still has a valid recorder instance.
+        request.node.stash[RECORDER_KEY] = recorder_registry.get(nodeid)
     else:
         # ── First attempt: start a new session ───────────────────────────
         final_config = _build_final_config(settings, appium_server, request, info=device_info)
@@ -385,19 +428,21 @@ def driver(settings, appium_server: AppiumServerInfo, device_info: DeviceInfo | 
             recorder.start(active_driver, settings)
         request.node.stash[RECORDER_KEY] = recorder
         registry[nodeid] = active_driver
+        recorder_registry[nodeid] = recorder
 
     request.node.stash[DRIVER_KEY] = active_driver
 
     try:
         yield active_driver
     finally:
-        _teardown_driver(active_driver, nodeid, registry, request.node.stash)
+        _teardown_driver(active_driver, nodeid, registry, recorder_registry, request.node.stash)
 
 
 def _teardown_driver(
     drv: Any,
     nodeid: str,
     registry: dict[str, Any],
+    recorder_registry: dict[str, ScreenRecorder | None],
     node_stash,
 ) -> None:
     """Decide what to do with *drv* after a test (or retry attempt) finishes.
@@ -413,6 +458,7 @@ def _teardown_driver(
         return
 
     registry.pop(nodeid, None)
+    recorder_registry.pop(nodeid, None)
     logger.info("driver:quit  session=%s  node=%s", getattr(drv, "session_id", "?"), nodeid)
     _safe_quit(drv)
 
@@ -510,6 +556,14 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]):
 
             screenshot_path = capture_screenshot(active_driver, item.nodeid, artifacts_dir)
             pagesource_path = capture_page_source(active_driver, item.nodeid, artifacts_dir)
+            device_log_path = capture_device_logs(
+                active_driver,
+                item.nodeid,
+                artifacts_dir,
+                platform=settings.platform,
+                udid=settings.udid,
+                is_simulator=settings.is_simulator,
+            )
 
             if screenshot_path and screenshot_path.exists():
                 logger.info("artifact:screenshot  %s", screenshot_path)
@@ -517,6 +571,9 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]):
             if pagesource_path and pagesource_path.exists():
                 logger.info("artifact:page_source  %s", pagesource_path)
                 attach_to_allure(pagesource_path, "Page source on failure", "text/xml")
+            if device_log_path and device_log_path.exists():
+                logger.info("artifact:device_logs  %s", device_log_path)
+                attach_to_allure(device_log_path, "Device logs on failure", "text/plain")
 
             # Stop video on final failure
             recorder = item.stash.get(RECORDER_KEY, None)
@@ -547,3 +604,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     for drv in list(registry.values()):
         _safe_quit(drv)
     registry.clear()
+    recorder_registry: dict[str, ScreenRecorder | None] = session.config.stash.get(
+        RETRY_RECORDER_REGISTRY_KEY, {}
+    )
+    recorder_registry.clear()
