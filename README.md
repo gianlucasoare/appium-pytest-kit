@@ -1,7 +1,5 @@
 # appium-pytest-kit
 
-[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-yellow?logo=buymeacoffee)](https://buymeacoffee.com/gianlucasoare)
-
 `appium-pytest-kit` is a reusable Appium 2.x + pytest plugin library for Python 3.11+. Install it once, generate a `.env`, and start writing mobile tests with zero boilerplate.
 
 ```bash
