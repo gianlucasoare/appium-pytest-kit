@@ -160,6 +160,68 @@ def capture_device_logs(
         return None
 
 
+def _render_driver_log_payload(log_type: str, entries: Any) -> str | None:
+    if entries is None:
+        return None
+    if not isinstance(entries, list):
+        return str(entries) if str(entries).strip() else None
+
+    lines: list[str] = [f"# appium-log-type: {log_type}"]
+    for entry in entries:
+        if isinstance(entry, dict):
+            timestamp = entry.get("timestamp", "")
+            level = entry.get("level", "")
+            message = entry.get("message", "")
+            rendered = f"[{timestamp}] {level} {message}".strip()
+            lines.append(rendered)
+        else:
+            lines.append(str(entry))
+    payload = "\n".join(lines).strip()
+    return payload or None
+
+
+def capture_session_log(
+    driver: Any,
+    node_id: str,
+    artifacts_dir: Path,
+) -> Path | None:
+    """Capture Appium session logs via ``driver.get_log`` and return saved path."""
+
+    preferred_types = ("server", "logcat", "syslog", "crashlog", "browser")
+
+    try:
+        available_types = getattr(driver, "log_types", None)
+        if available_types is None:
+            candidates = list(preferred_types)
+        elif isinstance(available_types, (list, tuple, set)):
+            normalized = [str(item) for item in available_types]
+            prioritized = [kind for kind in preferred_types if kind in normalized]
+            candidates = prioritized or normalized
+        else:
+            candidates = list(preferred_types)
+
+        for log_type in candidates:
+            try:
+                entries = driver.get_log(log_type)
+            except Exception:
+                continue
+            payload = _render_driver_log_payload(log_type, entries)
+            if not payload:
+                continue
+
+            dest = artifacts_dir / "session_logs" / f"{_safe_filename(node_id)}.log"
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(payload, encoding="utf-8")
+            return dest
+        return None
+    except Exception as exc:
+        warnings.warn(
+            f"Failed to capture session logs for {node_id!r}: {exc}",
+            stacklevel=2,
+        )
+        return None
+
+
 def attach_to_allure(path: Path, name: str, mime_type: str = "image/png") -> None:
     """Attach an artifact file to Allure report if allure-pytest is installed."""
 

@@ -201,6 +201,8 @@ class AppiumPytestKitSettings(BaseSettings):
     app_activity: str | None = None
     bundle_id: str | None = None
     automation_name: str | None = None
+    app_auto_discover: bool = False
+    app_builds_dir: Path = Path("app_builds")
 
     new_command_timeout: int = 120
     no_reset: bool = False
@@ -232,6 +234,8 @@ class AppiumPytestKitSettings(BaseSettings):
     is_simulator: bool = False
     video_policy: Literal["always", "failed", "never"] = "never"
     artifacts_dir: Path = Path("artifacts")
+    clean_artifacts_on_start: bool = False
+    appium_preflight_status: bool = True
     strict_config: bool = False
 
     reporting_enabled: bool = False

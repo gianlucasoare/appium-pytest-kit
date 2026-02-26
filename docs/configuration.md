@@ -52,6 +52,7 @@ pytest --app-env-file /path/to/staging.env
 | `APP_APPIUM_BASE_PATH` | `appium_base_path` | `str` | `/` | Base path for the managed Appium server |
 | `APP_APPIUM_SERVER_ARGS` | `appium_server_args` | comma-sep string | `""` | Extra CLI args passed to managed Appium |
 | `APP_APPIUM_START_TIMEOUT` | `appium_start_timeout` | `float` | `20.0` | Seconds to wait for managed server to start |
+| `APP_APPIUM_PREFLIGHT_STATUS` | `appium_preflight_status` | `bool` | `true` | Probe `<appium_url>/status` before creating sessions when using an external server |
 
 ### Device targeting
 
@@ -73,6 +74,8 @@ pytest --app-env-file /path/to/staging.env
 | `APP_APP_ACTIVITY` | `app_activity` | `str\|None` | `None` | Android: launch activity — e.g. `.MainActivity` |
 | `APP_BUNDLE_ID` | `bundle_id` | `str\|None` | `None` | iOS: bundle ID — e.g. `com.example.MyApp` |
 | `APP_AUTOMATION_NAME` | `automation_name` | `str\|None` | `None` | Override automation name. Defaults: `UiAutomator2` (Android), `XCUITest` (iOS) |
+| `APP_APP_AUTO_DISCOVER` | `app_auto_discover` | `bool` | `false` | Auto-pick the latest build from `APP_APP_BUILDS_DIR` when `APP_APP` is empty |
+| `APP_APP_BUILDS_DIR` | `app_builds_dir` | `str` | `app_builds` | Build root used for auto-discovery (`android/`, `ios/simulator/`, `ios/device/`) |
 
 ### Session and capabilities
 
@@ -87,11 +90,22 @@ pytest --app-env-file /path/to/staging.env
 | `APP_CAPABILITIES_JSON` | `capabilities_json` | JSON object | `{}` | Extra capabilities merged last — takes highest precedence |
 | `APP_STRICT_CONFIG` | `strict_config` | `bool` | `false` | Fail fast on unknown `APP_*` setting keys, override keys, and capability keys |
 
+### xdist parallel workers
+
+When running with `pytest-xdist` (`pytest -n N`), the kit auto-assigns worker-safe default ports
+if you did not set them explicitly:
+- Android: `systemPort = 8200 + worker_index`
+- iOS: `wdaLocalPort = 8100 + worker_index`, `webkitDebugProxyPort = 27753 + worker_index`
+
+If `APP_MANAGE_APPIUM_SERVER=true`, each worker also starts Appium on
+`APP_APPIUM_PORT + worker_index`.
+
 ### Artifacts and reporting
 
 | `.env` key | Python field | Type | Default | Description |
 |---|---|---|---|---|
 | `APP_ARTIFACTS_DIR` | `artifacts_dir` | `str` | `artifacts` | Root directory for screenshots, page source, and videos |
+| `APP_CLEAN_ARTIFACTS_ON_START` | `clean_artifacts_on_start` | `bool` | `false` | Remove existing artifact files at session start |
 | `APP_VIDEO_POLICY` | `video_policy` | `always\|failed\|never` | `never` | When to record and save video |
 | `APP_REPORTING_ENABLED` | `reporting_enabled` | `bool` | `false` | Write a JSON summary report after the session |
 | `APP_REPORT_DIR` | `report_dir` | `str` | `artifacts/appium-pytest-kit` | Directory for the JSON report |
@@ -155,7 +169,11 @@ pytest --app-bundle-id com.example.ios
 pytest --app-session-mode clean-session
 pytest --app-device-profile pixel7
 pytest --app-video-policy failed
+pytest --app-builds-dir app_builds
 pytest --app-is-simulator
+pytest --app-auto-discover
+pytest --app-clean-artifacts-on-start
+pytest --app-preflight-status
 pytest --app-manage-appium-server
 pytest --app-reporting-enabled
 pytest --app-capabilities-json '{"autoGrantPermissions": true}'

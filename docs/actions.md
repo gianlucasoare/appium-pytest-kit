@@ -44,6 +44,19 @@ actions.tap_if_present_first_available([
 ])
 ```
 
+### `click_by_attribute_value(locator, attr, expected, *, timeout=None) → bool`
+
+Find all elements matching `locator`, then click the first one where `element.get_attribute(attr) == expected`.
+
+```python
+# Useful for dynamic toggles/radio rows where the visible text changes
+actions.click_by_attribute_value(
+    (AppiumBy.ID, "setting_row"),
+    "checked",
+    "false",
+)
+```
+
 ### `tap_by_coordinates(x, y)`
 
 Tap at absolute screen pixel coordinates. Useful when elements have no reliable locator.
@@ -561,6 +574,18 @@ Check if a WEBVIEW context is currently available.
 
 Switch the driver to the first available WEBVIEW context.
 
+### `get_webview_context_name() → str`
+
+Return the first WEBVIEW context name.
+
+### `switch_to_frame(css_selector, *, timeout=None)`
+
+Inside WEBVIEW context, wait for an iframe and switch into it.
+
+### `switch_to_default_frame()`
+
+Return from iframe to top-level document in WEBVIEW.
+
 ### `switch_to_native()`
 
 Switch back to `NATIVE_APP` context.
@@ -571,9 +596,11 @@ waiter.for_context_contains("WEBVIEW")
 
 if actions.is_webview_available():
     actions.switch_to_webview()
+    actions.switch_to_frame("iframe#checkout")
     # Use standard Selenium/Appium API for web content
     el = driver.find_element(AppiumBy.CSS_SELECTOR, "#my-button")
     el.click()
+    actions.switch_to_default_frame()
     actions.switch_to_native()
 ```
 

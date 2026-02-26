@@ -296,3 +296,44 @@ class Waiter:
             timeout=t,
             message=f"None of {locators_list!r} became visible",
         )
+
+    def for_android_toast(
+        self,
+        text_substring: str,
+        *,
+        timeout: float = 5.0,
+    ):
+        """Wait for an Android toast containing *text_substring* and return its element."""
+
+        logger.debug("wait:android_toast  text=%r  timeout=%.1fs", text_substring, timeout)
+
+        def _toast_contains(driver):
+            try:
+                toasts = driver.find_elements("xpath", "//android.widget.Toast")
+            except Exception:
+                return False
+
+            for toast in toasts:
+                candidates: list[str] = []
+                try:
+                    if toast.text is not None:
+                        candidates.append(str(toast.text))
+                except Exception:
+                    pass
+                for attr in ("text", "name", "label", "content-desc"):
+                    try:
+                        value = toast.get_attribute(attr)
+                    except Exception:
+                        continue
+                    if value is not None:
+                        candidates.append(str(value))
+                if any(text_substring in value for value in candidates):
+                    return toast
+            return False
+
+        return self.until(
+            _toast_contains,
+            timeout=timeout,
+            message=f"Android toast containing {text_substring!r} did not appear",
+            locator=("xpath", "//android.widget.Toast"),
+        )

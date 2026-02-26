@@ -102,3 +102,26 @@ class TestForAndroidActivity:
             waiter.for_android_activity("Main")
 
 
+class TestForAndroidToast:
+    def test_returns_toast_when_matching_text_found(self) -> None:
+        mock_driver = MagicMock()
+        toast = MagicMock()
+        toast.text = "Saved successfully"
+        toast.get_attribute.return_value = "Saved successfully"
+        mock_driver.find_elements.return_value = [toast]
+        waiter = _make_waiter(driver=mock_driver)
+
+        result = waiter.for_android_toast("Saved")
+        assert result is toast
+
+    def test_raises_when_toast_text_never_matches(self) -> None:
+        mock_driver = MagicMock()
+        toast = MagicMock()
+        toast.text = "Other message"
+        toast.get_attribute.return_value = "Other message"
+        mock_driver.find_elements.return_value = [toast]
+        waiter = _make_waiter(driver=mock_driver)
+
+        with pytest.raises(WaitTimeoutError):
+            waiter.for_android_toast("Saved", timeout=0.1)
+

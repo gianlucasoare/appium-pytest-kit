@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "appium-pytest-kit"
-version = "0.1.6"
+version = "0.1.7"
 description = "Reusable Appium 2.x + pytest mobile test framework"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -42,10 +42,14 @@ allure = [
 retry = [
   "pytest-retry>=0.6.0",
 ]
+xdist = [
+  "pytest-xdist>=3.6.0",
+]
 all = [
   "PyYAML>=6.0",
   "allure-pytest>=2.13.0",
   "pytest-retry>=0.6.0",
+  "pytest-xdist>=3.6.0",
 ]
 
 [project.scripts]

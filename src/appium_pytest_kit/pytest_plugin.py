@@ -1,7 +1,12 @@
 """Pytest plugin that provides appium-pytest-kit fixtures and hooks."""
 
 
+import json
 import logging
+import os
+import re
+import shutil
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -17,6 +22,7 @@ from appium_pytest_kit._internal.diagnostics import (
     attach_to_allure,
     capture_device_logs,
     capture_page_source,
+    capture_session_log,
     capture_screenshot,
 )
 from appium_pytest_kit._internal.reporting import SessionReportCollector
@@ -52,6 +58,109 @@ RETRY_FAIL_COUNT_KEY: StashKey[dict[str, int]] = StashKey()
 # Set on a node's stash when the driver must survive the current teardown
 # because another retry attempt is coming for the same test.
 KEEP_DRIVER_ALIVE_KEY: StashKey[bool] = StashKey()
+_WORKER_INDEX_RE = re.compile(r"(\d+)$")
+
+
+def _xdist_worker_id(config: Config) -> str | None:
+    worker_input = getattr(config, "workerinput", None)
+    if isinstance(worker_input, dict):
+        worker_id = worker_input.get("workerid")
+        if worker_id:
+            return str(worker_id)
+    worker_id = os.getenv("PYTEST_XDIST_WORKER")
+    return worker_id or None
+
+
+def _xdist_worker_index(worker_id: str | None) -> int:
+    if not worker_id:
+        return 0
+    match = _WORKER_INDEX_RE.search(worker_id)
+    return int(match.group(1)) if match else 0
+
+
+def _is_xdist_controller(config: Config) -> bool:
+    hasplugin = getattr(getattr(config, "pluginmanager", None), "hasplugin", None)
+    xdist_enabled = bool(hasplugin("xdist")) if callable(hasplugin) else False
+    return xdist_enabled and _xdist_worker_id(config) is None
+
+
+def _is_capability_missing(capabilities: dict[str, Any], key: str) -> bool:
+    if key not in capabilities:
+        return True
+    value = capabilities.get(key)
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value.strip() == ""
+    return False
+
+
+def _set_default_capability(capabilities: dict[str, Any], key: str, value: int) -> None:
+    if _is_capability_missing(capabilities, key):
+        capabilities[key] = value
+
+
+def _apply_xdist_worker_isolation(
+    capabilities: dict[str, Any],
+    settings: AppiumPytestKitSettings,
+    config: Config,
+) -> None:
+    """Apply worker-specific default ports so parallel sessions do not collide."""
+
+    worker_id = _xdist_worker_id(config)
+    if worker_id is None:
+        return
+
+    index = _xdist_worker_index(worker_id)
+    if settings.platform == "android":
+        _set_default_capability(capabilities, "systemPort", 8200 + index)
+    elif settings.platform == "ios":
+        _set_default_capability(capabilities, "wdaLocalPort", 8100 + index)
+        _set_default_capability(capabilities, "webkitDebugProxyPort", 27753 + index)
+
+
+def _merge_xdist_worker_reports(report_dir: Path) -> Path | None:
+    """Merge worker summary files into a single summary.json on controller."""
+
+    workers_root = report_dir / "workers"
+    if not workers_root.exists():
+        return None
+
+    merged_tests: list[dict[str, Any]] = []
+    for summary_file in sorted(workers_root.glob("*/summary.json")):
+        try:
+            payload = json.loads(summary_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+
+        rows = payload.get("tests", [])
+        if isinstance(rows, list):
+            merged_tests.extend(row for row in rows if isinstance(row, dict))
+
+    totals = {"passed": 0, "failed": 0, "skipped": 0}
+    for row in merged_tests:
+        outcome = str(row.get("outcome", ""))
+        if outcome in totals:
+            totals[outcome] += 1
+
+    payload = {"totals": totals, "tests": merged_tests}
+    report_dir.mkdir(parents=True, exist_ok=True)
+    output_path = report_dir / "summary.json"
+    output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return output_path
+
+
+def _cleanup_artifacts_dir(path: Path) -> None:
+    """Delete existing artifacts directory and recreate it."""
+
+    resolved = path.resolve()
+    if resolved == Path(resolved.anchor):
+        logger.warning("artifact:cleanup skipped for unsafe root path: %s", resolved)
+        return
+
+    if resolved.exists():
+        shutil.rmtree(resolved, ignore_errors=True)
+    resolved.mkdir(parents=True, exist_ok=True)
 
 
 def _get_max_retries(item: pytest.Item) -> int:
@@ -115,6 +224,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     group.addoption("--app-devices-yaml", action="store", default=None)
     group.addoption("--app-video-policy", action="store", default=None)
     group.addoption("--app-artifacts-dir", action="store", default=None)
+    group.addoption("--app-builds-dir", action="store", default=None)
 
     group.addoption(
         "--app-strict-config",
@@ -163,6 +273,42 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         action="store_false",
         default=None,
         dest="app_is_simulator",
+    )
+    group.addoption(
+        "--app-auto-discover",
+        action="store_true",
+        default=None,
+        dest="app_auto_discover",
+    )
+    group.addoption(
+        "--no-app-auto-discover",
+        action="store_false",
+        default=None,
+        dest="app_auto_discover",
+    )
+    group.addoption(
+        "--app-clean-artifacts-on-start",
+        action="store_true",
+        default=None,
+        dest="app_clean_artifacts_on_start",
+    )
+    group.addoption(
+        "--no-app-clean-artifacts-on-start",
+        action="store_false",
+        default=None,
+        dest="app_clean_artifacts_on_start",
+    )
+    group.addoption(
+        "--app-preflight-status",
+        action="store_true",
+        default=None,
+        dest="app_preflight_status",
+    )
+    group.addoption(
+        "--no-app-preflight-status",
+        action="store_false",
+        default=None,
+        dest="app_preflight_status",
     )
 
     group.addoption(
@@ -215,8 +361,12 @@ def _collect_cli_overrides(config: Config) -> dict[str, Any]:
             "app_devices_yaml": config.getoption("app_devices_yaml"),
             "app_video_policy": config.getoption("app_video_policy"),
             "app_artifacts_dir": config.getoption("app_artifacts_dir"),
+            "app_builds_dir": config.getoption("app_builds_dir"),
             "app_is_simulator": config.getoption("app_is_simulator"),
             "app_strict_config": config.getoption("app_strict_config"),
+            "app_auto_discover": config.getoption("app_auto_discover"),
+            "app_clean_artifacts_on_start": config.getoption("app_clean_artifacts_on_start"),
+            "appium_preflight_status": config.getoption("app_preflight_status"),
         }.items()
         if value is not None
     }
@@ -244,13 +394,24 @@ def pytest_configure(config: Config) -> None:
     if maybe_replacement is not None:
         settings = maybe_replacement
 
+    worker_id = _xdist_worker_id(config)
+    if settings.clean_artifacts_on_start and worker_id is None:
+        _cleanup_artifacts_dir(settings.artifacts_dir)
+
     config.stash[SETTINGS_KEY] = settings
     config.stash[RETRY_DRIVER_REGISTRY_KEY] = {}
     config.stash[RETRY_RECORDER_REGISTRY_KEY] = {}
     config.stash[RETRY_FAIL_COUNT_KEY] = {}
 
     if settings.reporting_enabled:
-        config.stash[REPORTER_KEY] = SessionReportCollector(output_dir=settings.report_dir)
+        if _is_xdist_controller(config):
+            config.stash[REPORTER_KEY] = None
+        elif worker_id is not None:
+            config.stash[REPORTER_KEY] = SessionReportCollector(
+                output_dir=settings.report_dir / "workers" / worker_id
+            )
+        else:
+            config.stash[REPORTER_KEY] = SessionReportCollector(output_dir=settings.report_dir)
     else:
         config.stash[REPORTER_KEY] = None
 
@@ -365,6 +526,8 @@ def _build_final_config(
     ):
         if extension_caps:
             capabilities.update(dict(extension_caps))
+
+    _apply_xdist_worker_isolation(capabilities, settings, request.config)
 
     try:
         validate_capabilities_for_strict(capabilities, strict=settings.strict_config)
@@ -578,6 +741,7 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]):
                 udid=settings.udid,
                 is_simulator=settings.is_simulator,
             )
+            session_log_path = capture_session_log(active_driver, item.nodeid, artifacts_dir)
 
             if screenshot_path and screenshot_path.exists():
                 logger.info("artifact:screenshot  %s", screenshot_path)
@@ -588,6 +752,9 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]):
             if device_log_path and device_log_path.exists():
                 logger.info("artifact:device_logs  %s", device_log_path)
                 attach_to_allure(device_log_path, "Device logs on failure", "text/plain")
+            if session_log_path and session_log_path.exists():
+                logger.info("artifact:session_logs  %s", session_log_path)
+                attach_to_allure(session_log_path, "Session logs on failure", "text/plain")
 
             # Stop video on final failure
             recorder = item.stash.get(RECORDER_KEY, None)
@@ -610,9 +777,14 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]):
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     """Flush optional report output and clean up any orphaned retry drivers."""
 
-    reporter = session.config.stash.get(REPORTER_KEY, None)
-    if reporter is not None:
-        reporter.flush()
+    settings: AppiumPytestKitSettings | None = session.config.stash.get(SETTINGS_KEY, None)
+    if _is_xdist_controller(session.config):
+        if settings is not None and settings.reporting_enabled:
+            _merge_xdist_worker_reports(settings.report_dir)
+    else:
+        reporter = session.config.stash.get(REPORTER_KEY, None)
+        if reporter is not None:
+            reporter.flush()
 
     registry: dict[str, Any] = session.config.stash.get(RETRY_DRIVER_REGISTRY_KEY, {})
     for drv in list(registry.values()):

@@ -124,6 +124,39 @@ class TestTapIfPresentFirstAvailable:
         assert result is False
 
 
+class TestClickByAttributeValue:
+    def test_clicks_matching_element(self) -> None:
+        actions, driver = _make_actions()
+        first = MagicMock()
+        first.get_attribute.return_value = "off"
+        second = MagicMock()
+        second.get_attribute.return_value = "on"
+        driver.find_elements.return_value = [first, second]
+        actions._waiter.until.side_effect = lambda condition, **_kwargs: condition(driver)
+
+        result = actions.click_by_attribute_value(("id", "toggle"), "value", "on")
+
+        assert result is True
+        second.click.assert_called_once()
+        first.click.assert_not_called()
+
+    def test_times_out_when_attribute_not_found(self) -> None:
+        actions, driver = _make_actions()
+        el = MagicMock()
+        el.get_attribute.return_value = "off"
+        driver.find_elements.return_value = [el]
+        def _until(condition, *, message="", locator=None, **_kwargs):
+            _ = (message, locator)
+            if not condition(driver):
+                raise WaitTimeoutError("missing", locator=("id", "toggle"), timeout=0.1)
+            return True
+
+        actions._waiter.until.side_effect = _until
+
+        with pytest.raises(WaitTimeoutError):
+            actions.click_by_attribute_value(("id", "toggle"), "value", "on", timeout=0.1)
+
+
 # ---------------------------------------------------------------------------
 # Text input variants
 # ---------------------------------------------------------------------------
@@ -473,6 +506,38 @@ class TestSwitchToWebview:
         with pytest.raises(ActionError) as exc_info:
             actions.switch_to_webview()
         assert exc_info.value.action == "switch_to_webview"
+
+
+class TestGetWebviewContextName:
+    def test_returns_first_webview_context_name(self) -> None:
+        actions, driver = _make_actions()
+        driver.contexts = ["NATIVE_APP", "WEBVIEW_a", "WEBVIEW_b"]
+        assert actions.get_webview_context_name() == "WEBVIEW_a"
+
+    def test_raises_when_no_webview_available(self) -> None:
+        actions, driver = _make_actions()
+        driver.contexts = ["NATIVE_APP"]
+        with pytest.raises(ActionError) as exc_info:
+            actions.get_webview_context_name()
+        assert exc_info.value.action == "get_webview_context_name"
+
+
+class TestFrameSwitching:
+    def test_switch_to_frame_uses_css_selector(self) -> None:
+        actions, driver = _make_actions()
+        frame = MagicMock()
+        driver.find_element.return_value = frame
+        actions._waiter.until.side_effect = lambda condition, **_kwargs: condition(driver)
+
+        actions.switch_to_frame("iframe.main")
+
+        driver.find_element.assert_called_once_with("css selector", "iframe.main")
+        driver.switch_to.frame.assert_called_once_with(frame)
+
+    def test_switch_to_default_frame_calls_driver(self) -> None:
+        actions, driver = _make_actions()
+        actions.switch_to_default_frame()
+        driver.switch_to.default_content.assert_called_once()
 
 
 class TestSwitchToNative:

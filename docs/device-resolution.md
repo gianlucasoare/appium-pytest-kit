@@ -148,7 +148,8 @@ If no device is found, `device_info` is `None`. The driver creation will then fa
 
 ## Launch validation
 
-Before creating an Appium session, the framework checks that the minimum required app settings are present:
+Before creating an Appium session, the framework checks that the minimum required app settings are present.
+If `APP_APP_AUTO_DISCOVER=true`, it also accepts the latest build discovered under `APP_APP_BUILDS_DIR`.
 
 **Android** — requires `APP_APP` (APK path) **or** both `APP_APP_PACKAGE` + `APP_APP_ACTIVITY`:
 
@@ -159,6 +160,10 @@ APP_APP=/path/to/myapp.apk
 # Option B — launch installed app
 APP_APP_PACKAGE=com.example.myapp
 APP_APP_ACTIVITY=.MainActivity
+
+# Option C — auto-discover latest APK/AAB from app_builds/android/
+APP_APP_AUTO_DISCOVER=true
+APP_APP_BUILDS_DIR=app_builds
 ```
 
 **iOS** — requires `APP_APP` (IPA path) **or** `APP_BUNDLE_ID`:
@@ -169,6 +174,10 @@ APP_APP=/path/to/MyApp.ipa
 
 # Option B — launch installed app
 APP_BUNDLE_ID=com.example.MyApp
+
+# Option C — auto-discover latest build (APP for simulator, IPA for device)
+APP_APP_AUTO_DISCOVER=true
+APP_APP_BUILDS_DIR=app_builds
 ```
 
 If neither is configured, `LaunchValidationError` is raised with a clear message before any connection is attempted.

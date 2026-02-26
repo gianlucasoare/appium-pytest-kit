@@ -11,7 +11,8 @@ On any test that fails in the `call` phase, the framework automatically runs:
 1. **Screenshot** → `artifacts/screenshots/<test_id>.png`
 2. **Page source** → `artifacts/pagesource/<test_id>.xml`
 3. **Device logs** → `artifacts/device_logs/<test_id>.log` (`adb logcat` / iOS logs)
-4. **Video** (if policy allows) → `artifacts/videos/<test_id>.mp4`
+4. **Session log** → `artifacts/session_logs/<test_id>.log` (from Appium `driver.get_log(...)`)
+5. **Video** (if policy allows) → `artifacts/videos/<test_id>.mp4`
 
 This happens without any configuration — the default `artifacts_dir` is `artifacts/`.
 
@@ -36,6 +37,8 @@ artifacts/
 │   └── tests__test_login__test_wrong_password.xml
 ├── device_logs/
 │   └── tests__test_login__test_wrong_password.log
+├── session_logs/
+│   └── tests__test_login__test_wrong_password.log
 └── videos/
     └── tests__test_login__test_wrong_password.mp4
 ```
@@ -57,6 +60,7 @@ Video is captured per test using Appium's built-in screen recording.
 APP_VIDEO_POLICY=never    # default — no recording
 APP_VIDEO_POLICY=failed   # record every test; save only when test fails
 APP_VIDEO_POLICY=always   # record every test; always save
+APP_CLEAN_ARTIFACTS_ON_START=true  # optional: wipe old artifacts before the run
 ```
 
 ```bash
@@ -129,6 +133,9 @@ After the session, `artifacts/appium-pytest-kit/summary.json` is written:
   ]
 }
 ```
+
+With `pytest-xdist`, each worker writes its own intermediate summary and the
+controller merges them into a single final `summary.json`.
 
 Only the `call` phase is recorded (setup/teardown failures are tracked by pytest separately).
 

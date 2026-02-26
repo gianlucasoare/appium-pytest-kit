@@ -12,6 +12,7 @@ class SessionReportCollector:
     """Collects basic test outcomes and writes a small JSON summary."""
 
     output_dir: Path
+    output_filename: str = "summary.json"
     records: list[dict[str, Any]] = field(default_factory=list)
 
     def record(self, report: Any) -> None:
@@ -40,6 +41,6 @@ class SessionReportCollector:
             "totals": totals,
             "tests": self.records,
         }
-        output_path = self.output_dir / "summary.json"
+        output_path = self.output_dir / self.output_filename
         output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         return output_path

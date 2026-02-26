@@ -110,6 +110,9 @@ ctx_name = waiter.for_context_contains("WEBVIEW_com.example")
 activity = waiter.for_android_activity("MainActivity")
 # returns the full activity name string
 waiter.for_android_activity("SettingsActivity", timeout=5.0)
+
+# Android — wait for toast message content
+toast = waiter.for_android_toast("Saved", timeout=5.0)
 ```
 
 ---

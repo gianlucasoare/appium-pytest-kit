@@ -81,6 +81,10 @@ pytest --app-manage-appium-server
 
 # Disable auto-management (back to explicit URL)
 pytest --no-app-manage-appium-server
+
+# Probe /status on external Appium before creating sessions (default enabled)
+pytest --app-preflight-status
+pytest --no-app-preflight-status
 ```
 
 | Flag | Description |
@@ -89,6 +93,8 @@ pytest --no-app-manage-appium-server
 | `--appium-url URL` | Legacy alias for `--app-appium-url` |
 | `--app-manage-appium-server` | Start a local Appium server automatically |
 | `--no-app-manage-appium-server` | Do not start a local Appium server |
+| `--app-preflight-status` | Validate external Appium `<url>/status` before use |
+| `--no-app-preflight-status` | Skip external Appium status preflight |
 
 ---
 
@@ -144,6 +150,10 @@ pytest --app-app-activity .MainActivity
 
 # Launch an already-installed iOS app
 pytest --app-bundle-id com.example.MyApp
+
+# Auto-discover latest build from app_builds/
+pytest --app-auto-discover
+pytest --app-builds-dir app_builds
 ```
 
 | Flag | Platform | Description |
@@ -152,6 +162,9 @@ pytest --app-bundle-id com.example.MyApp
 | `--app-app-package PKG` | Android | App package name |
 | `--app-app-activity ACTIVITY` | Android | Main activity to launch, e.g. `.MainActivity` |
 | `--app-bundle-id ID` | iOS | Bundle identifier |
+| `--app-auto-discover` | both | Auto-pick latest build from `app_builds` when `--app-app` is not set |
+| `--no-app-auto-discover` | both | Disable build auto-discovery |
+| `--app-builds-dir PATH` | both | Root path for auto-discovery (`android/`, `ios/simulator/`, `ios/device/`) |
 
 ---
 
@@ -229,11 +242,17 @@ pytest --app-video-policy never
 ```bash
 # Change the artifacts output directory
 pytest --app-artifacts-dir test-output/artifacts
+
+# Optional: wipe old artifacts before test session starts
+pytest --app-clean-artifacts-on-start
+pytest --no-app-clean-artifacts-on-start
 ```
 
 | Flag | Default | Description |
 |---|---|---|
 | `--app-artifacts-dir PATH` | `artifacts` | Root directory for screenshots, videos, and page sources |
+| `--app-clean-artifacts-on-start` | `false` | Remove existing artifact files before the run |
+| `--no-app-clean-artifacts-on-start` | `false` | Keep existing artifact files |
 
 ---
 
@@ -411,6 +430,31 @@ pytest --retries 2 --retry-delay 1 --app-session-mode clean -m smoke
 | `--retries N` | `0` | Retry each failed test up to N additional times |
 | `--retry-delay SECS` | `0` | Seconds to wait between retry attempts |
 | `--retry-outcome OUTCOME` | `failed` | Outcome to retry on (`failed`, `error`, or `all`) |
+
+---
+
+## Parallel (pytest-xdist)
+
+Install the optional extra:
+
+```bash
+pip install "appium-pytest-kit[xdist]"
+# or everything at once
+pip install "appium-pytest-kit[all]"
+```
+
+Run tests with workers:
+
+```bash
+pytest -n 4
+```
+
+Worker isolation applied automatically:
+- Android: default `systemPort = 8200 + worker_index` when not explicitly provided.
+- iOS: default `wdaLocalPort = 8100 + worker_index` and
+  `webkitDebugProxyPort = 27753 + worker_index` when not explicitly provided.
+- Managed server mode: each worker starts Appium on
+  `APP_APPIUM_PORT + worker_index`.
 
 ### Per-test marker
 

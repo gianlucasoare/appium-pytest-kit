@@ -3,6 +3,8 @@
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+import logging
+from pathlib import Path
 from typing import Any
 
 from appium import webdriver
@@ -11,6 +13,8 @@ from appium.options.common import AppiumOptions
 from appium_pytest_kit.errors import DriverCreationError
 from appium_pytest_kit.interfaces import CapabilitiesAdapter
 from appium_pytest_kit.settings import AppiumPytestKitSettings
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,7 +38,86 @@ def _has_value(value: Any) -> bool:
     return True
 
 
+def _candidate_app_paths(settings: AppiumPytestKitSettings) -> list[Path]:
+    base_dir = Path(settings.app_builds_dir)
+    if not base_dir.exists():
+        return []
+
+    def _collect(roots: list[Path], suffixes: set[str], *, allow_dirs: bool = False) -> list[Path]:
+        discovered: list[Path] = []
+        visited: set[Path] = set()
+        for root in roots:
+            if not root.exists() or root in visited:
+                continue
+            visited.add(root)
+            for candidate in root.rglob("*"):
+                suffix = candidate.suffix.lower()
+                if suffix not in suffixes:
+                    continue
+                if candidate.is_file() or (allow_dirs and candidate.is_dir()):
+                    discovered.append(candidate)
+        return discovered
+
+    if settings.platform == "android":
+        return _collect(
+            [base_dir / "android", base_dir],
+            {".apk", ".aab"},
+        )
+
+    ios_root = base_dir / "ios"
+    if settings.is_simulator:
+        primary = _collect(
+            [ios_root / "simulator", ios_root, base_dir],
+            {".app"},
+            allow_dirs=True,
+        )
+        fallback = _collect(
+            [ios_root / "simulator", ios_root, base_dir],
+            {".ipa"},
+        )
+        return [*primary, *fallback]
+
+    primary = _collect(
+        [ios_root / "device", ios_root, base_dir],
+        {".ipa"},
+    )
+    fallback = _collect(
+        [ios_root / "device", ios_root, base_dir],
+        {".app"},
+        allow_dirs=True,
+    )
+    return [*primary, *fallback]
+
+
+def discover_latest_app_build(settings: AppiumPytestKitSettings) -> str | None:
+    """Return latest app binary path from app_builds/* when auto-discovery is enabled."""
+
+    if not settings.app_auto_discover:
+        return None
+
+    candidates = _candidate_app_paths(settings)
+    if not candidates:
+        logger.info(
+            "app:auto-discovery enabled but no candidate build found under %s",
+            settings.app_builds_dir,
+        )
+        return None
+
+    def _sort_key(path: Path) -> tuple[float, str]:
+        try:
+            modified = path.stat().st_mtime
+        except OSError:
+            modified = -1.0
+        return modified, str(path)
+
+    latest = max(candidates, key=_sort_key)
+    logger.info("app:auto-discovered build=%s", latest)
+    return str(latest)
+
+
 def _base_capabilities(settings: AppiumPytestKitSettings) -> dict[str, Any]:
+    resolved_app = settings.app if _has_value(settings.app) else discover_latest_app_build(settings)
+
     caps: dict[str, Any] = {
         "platformName": settings.platform,
         "automationName": settings.automation_name
@@ -48,7 +131,7 @@ def _base_capabilities(settings: AppiumPytestKitSettings) -> dict[str, Any]:
         "deviceName": settings.device_name,
         "platformVersion": settings.platform_version,
         "udid": settings.udid,
-        "app": settings.app,
+        "app": resolved_app,
     }
     caps.update({key: value for key, value in optional_shared.items() if _has_value(value)})
 

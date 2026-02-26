@@ -270,20 +270,27 @@ class DeviceResolver:
 def validate_launch_config(settings: "AppiumPytestKitSettings") -> None:
     """Raise LaunchValidationError when required app launch settings are missing."""
     from appium_pytest_kit.errors import LaunchValidationError
+    from appium_pytest_kit.driver import discover_latest_app_build
+
+    resolved_app = settings.app or discover_latest_app_build(settings)
 
     if settings.platform == "android":
-        has_app = bool(settings.app)
+        has_app = bool(resolved_app)
         has_activity = bool(settings.app_package and settings.app_activity)
         if not has_app and not has_activity:
             msg = (
                 "Android launch requires APP_APP (apk path) "
-                "or both APP_APP_PACKAGE + APP_APP_ACTIVITY"
+                "or both APP_APP_PACKAGE + APP_APP_ACTIVITY. "
+                "If APP_APP_AUTO_DISCOVER=true, ensure a build exists under APP_APP_BUILDS_DIR."
             )
             raise LaunchValidationError(msg)
 
     elif settings.platform == "ios":
-        has_app = bool(settings.app)
+        has_app = bool(resolved_app)
         has_bundle = bool(settings.bundle_id)
         if not has_app and not has_bundle:
-            msg = "iOS launch requires APP_APP (ipa/app path) or APP_BUNDLE_ID"
+            msg = (
+                "iOS launch requires APP_APP (ipa/app path) or APP_BUNDLE_ID. "
+                "If APP_APP_AUTO_DISCOVER=true, ensure a build exists under APP_APP_BUILDS_DIR."
+            )
             raise LaunchValidationError(msg)

@@ -16,10 +16,11 @@ appium-pytest-kit-init --framework --root my-project
 | | |
 |---|---|
 | **Zero-config fixtures** | `driver`, `waiter`, `actions`, `page_factory` — just add to your test function |
-| **Auto failure artifacts** | Screenshot + page source + device logs captured automatically on failure |
+| **Auto failure artifacts** | Screenshot + page source + device logs + session log captured automatically on failure |
 | **3-tier device resolution** | explicit settings → named profile → auto-detect via adb/xcrun |
 | **Session modes** | `clean` (per-test) · `clean-session` (shared) · `debug` (keep alive) |
 | **Retry support** | Session reused across retry attempts — no restart cost between tries |
+| **xdist parallelism** | Worker-safe capability port isolation + per-worker managed Appium ports |
 | **Fail-fast** | `--app-fail-fast` stops the suite after retries are exhausted, not before |
 | **Explicit waits** | `WaitTimeoutError` with structured `.locator` and `.timeout` context |
 | **High-level actions** | tap, type, swipe, scroll, assertions — all wait-safe |
@@ -45,6 +46,7 @@ All required dependencies are **installed automatically** with `pip install appi
 pip install "appium-pytest-kit[yaml]"    # device profile YAML support
 pip install "appium-pytest-kit[allure]"  # Allure report attachments
 pip install "appium-pytest-kit[retry]"   # pytest-retry for flaky test handling
+pip install "appium-pytest-kit[xdist]"   # pytest-xdist parallel execution
 pip install "appium-pytest-kit[all]"     # all optional extras
 ```
 
@@ -53,6 +55,7 @@ pip install "appium-pytest-kit[all]"     # all optional extras
 | `[yaml]` | PyYAML ≥ 6.0 | Named device profiles in `data/devices.yaml` |
 | `[allure]` | allure-pytest ≥ 2.13.0 | Screenshots + page source in Allure reports |
 | `[retry]` | pytest-retry ≥ 0.6.0 | Retry flaky tests while reusing the same Appium session |
+| `[xdist]` | pytest-xdist ≥ 3.6.0 | Run tests in parallel workers safely |
 
 ---
 
@@ -219,6 +222,27 @@ See [docs/cli-reference.md](docs/cli-reference.md) for the full retry flag refer
 
 ---
 
+## Parallel with xdist
+
+Install xdist support:
+
+```bash
+pip install "appium-pytest-kit[xdist]"
+```
+
+Run tests in parallel workers:
+
+```bash
+pytest -n 4
+```
+
+When running with xdist:
+- Android workers get default `systemPort` values (`8200 + worker_index`) unless explicitly set.
+- iOS workers get default `wdaLocalPort` (`8100 + worker_index`) and `webkitDebugProxyPort` (`27753 + worker_index`) unless explicitly set.
+- With `APP_MANAGE_APPIUM_SERVER=true`, each worker starts Appium on `APP_APPIUM_PORT + worker_index`.
+
+---
+
 ## Device resolution (3-tier)
 
 1. **Explicit** — `APP_DEVICE_NAME` / `APP_UDID` in `.env` or CLI
@@ -239,6 +263,7 @@ On test failure the framework automatically captures:
 - **Screenshot** → `artifacts/screenshots/<test_id>.png`
 - **Page source** → `artifacts/pagesource/<test_id>.xml`
 - **Device logs** → `artifacts/device_logs/<test_id>.log`
+- **Session log** → `artifacts/session_logs/<test_id>.log` (from available Appium log type)
 - **Video** (if configured) → `artifacts/videos/<test_id>.mp4`
 
 ```env
@@ -309,6 +334,7 @@ waiter.for_all_gone([loc1, loc2])
 waiter.for_any_visible([loc1, loc2])
 waiter.for_context_contains("WEBVIEW")
 waiter.for_android_activity("MainActivity")
+waiter.for_android_toast("Saved")
 ```
 
 ---
@@ -319,6 +345,7 @@ waiter.for_android_activity("MainActivity")
 # Tap
 actions.tap_if_present(locator)
 actions.tap_if_present_first_available([l1, l2])
+actions.click_by_attribute_value((By.ID, "toggle"), "checked", "true")
 actions.tap_by_coordinates(x, y)
 actions.double_tap(locator)
 actions.long_press(locator, duration_seconds=2)
@@ -374,6 +401,9 @@ actions.open_deep_link("myapp://profile", app_id="com.example.myapp")
 
 # Hybrid
 actions.switch_to_webview()
+actions.get_webview_context_name()
+actions.switch_to_frame("iframe.checkout")
+actions.switch_to_default_frame()
 actions.switch_to_native()
 ```
 

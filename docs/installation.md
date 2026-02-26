@@ -107,6 +107,12 @@ pip install "appium-pytest-kit[yaml]"
 # Allure report attachments (screenshots + page source in Allure)
 pip install "appium-pytest-kit[allure]"
 
+# Retry failed tests with session reuse
+pip install "appium-pytest-kit[retry]"
+
+# Parallel workers with pytest-xdist
+pip install "appium-pytest-kit[xdist]"
+
 # All optional extras at once
 pip install "appium-pytest-kit[all]"
 ```
@@ -115,7 +121,9 @@ pip install "appium-pytest-kit[all]"
 |---|---|---|
 | `[yaml]` | `PyYAML >= 6.0` | Using named device profiles in `data/devices.yaml` |
 | `[allure]` | `allure-pytest >= 2.13.0` | Attaching artifacts to Allure reports |
-| `[all]` | Both above | Install everything in one command |
+| `[retry]` | `pytest-retry >= 0.6.0` | Retrying flaky tests while reusing driver sessions |
+| `[xdist]` | `pytest-xdist >= 3.6.0` | Parallel test execution (`pytest -n N`) |
+| `[all]` | All optional extras above | Install everything in one command |
 
 > **Note:** If you don't install `[yaml]`, device profile loading will raise a `ConfigurationError` with a clear message telling you to install PyYAML. If you don't install `[allure]`, Allure attachment is silently skipped — no error.
 

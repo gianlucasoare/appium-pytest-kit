@@ -77,3 +77,23 @@ def test_strict_config_from_env(tmp_path: Path) -> None:
     env.write_text("APP_STRICT_CONFIG=true\n", encoding="utf-8")
     s = load_settings(env_file=env)
     assert s.strict_config is True
+
+
+def test_app_auto_discover_defaults_and_env(tmp_path: Path) -> None:
+    default_settings = AppiumPytestKitSettings()
+    assert default_settings.app_auto_discover is False
+
+    env = tmp_path / ".env"
+    env.write_text(
+        "APP_APP_AUTO_DISCOVER=true\nAPP_APP_BUILDS_DIR=/tmp/custom-builds\n",
+        encoding="utf-8",
+    )
+    s = load_settings(env_file=env)
+    assert s.app_auto_discover is True
+    assert s.app_builds_dir == Path("/tmp/custom-builds")
+
+
+def test_artifact_cleanup_and_preflight_defaults() -> None:
+    s = AppiumPytestKitSettings()
+    assert s.clean_artifacts_on_start is False
+    assert s.appium_preflight_status is True

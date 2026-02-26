@@ -8,6 +8,7 @@ from appium_pytest_kit._internal.diagnostics import (
     _safe_filename,
     capture_device_logs,
     capture_page_source,
+    capture_session_log,
     capture_screenshot,
 )
 
@@ -115,4 +116,30 @@ class TestCaptureDeviceLogs:
 
         monkeypatch.setattr("appium_pytest_kit._internal.diagnostics.subprocess.run", _missing)
         result = capture_device_logs(driver, "test_missing::logs", tmp_path, platform="android")
+        assert result is None
+
+
+class TestCaptureSessionLog:
+    def test_saves_driver_session_log_when_available(self, tmp_path: Path) -> None:
+        driver = MagicMock()
+        driver.log_types = ["server"]
+        driver.get_log.return_value = [
+            {"timestamp": 1, "level": "INFO", "message": "session-start"},
+            {"timestamp": 2, "level": "WARN", "message": "flaky action"},
+        ]
+
+        result = capture_session_log(driver, "tests::session", tmp_path)
+
+        assert result is not None
+        assert result.parent.name == "session_logs"
+        payload = result.read_text(encoding="utf-8")
+        assert "appium-log-type: server" in payload
+        assert "session-start" in payload
+
+    def test_returns_none_when_driver_has_no_log_support(self, tmp_path: Path) -> None:
+        driver = MagicMock()
+        driver.log_types = []
+        driver.get_log.side_effect = Exception("unsupported")
+
+        result = capture_session_log(driver, "tests::session", tmp_path)
         assert result is None

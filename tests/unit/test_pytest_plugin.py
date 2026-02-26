@@ -1,5 +1,7 @@
 """Targeted tests for pytest plugin lifecycle and option wiring."""
 
+import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -44,17 +46,37 @@ class _FakeConfig:
             pytest_plugin.RETRY_DRIVER_REGISTRY_KEY: {},
             pytest_plugin.RETRY_RECORDER_REGISTRY_KEY: {},
         }
+        self.workerinput = None
         self.pluginmanager = SimpleNamespace(
             hook=SimpleNamespace(
                 pytest_appium_pytest_kit_driver_created=MagicMock(),
                 pytest_appium_pytest_kit_configure_settings=MagicMock(return_value=None),
-            )
+            ),
+            hasplugin=lambda _name: False,
         )
 
     def getoption(self, name: str, default=None):
         if name == "app_override":
             return ["unknownField=1"]
         return default
+
+
+class _ConfigureConfig:
+    def __init__(self, *, workerinput=None, has_xdist: bool = False, options=None) -> None:
+        self.workerinput = workerinput
+        self._options = options or {}
+        self.stash: dict = {}
+        self.pluginmanager = SimpleNamespace(
+            hook=SimpleNamespace(
+                pytest_appium_pytest_kit_configure_settings=MagicMock(return_value=None),
+            ),
+            hasplugin=lambda name: has_xdist if name == "xdist" else False,
+        )
+
+    def getoption(self, name: str, default=None):
+        if name == "app_override":
+            return self._options.get(name, [])
+        return self._options.get(name, default)
 
 
 def test_pytest_addoption_registers_appium_url_alias() -> None:
@@ -183,3 +205,114 @@ def test_build_final_config_uses_profile_automation_name_when_default(monkeypatc
     )
     config = pytest_plugin._build_final_config(settings, appium_server, request, info=info)
     assert config.capabilities["automationName"] == "Espresso"
+
+
+def test_cleanup_artifacts_dir_removes_existing_content(tmp_path: Path) -> None:
+    artifacts = tmp_path / "artifacts"
+    nested = artifacts / "screenshots"
+    nested.mkdir(parents=True)
+    (nested / "old.png").write_bytes(b"x")
+
+    pytest_plugin._cleanup_artifacts_dir(artifacts)
+
+    assert artifacts.exists()
+    assert list(artifacts.iterdir()) == []
+
+
+def test_apply_xdist_worker_isolation_android_sets_default_system_port() -> None:
+    config = SimpleNamespace(workerinput={"workerid": "gw2"})
+    settings = SimpleNamespace(platform="android")
+    capabilities: dict[str, object] = {}
+
+    pytest_plugin._apply_xdist_worker_isolation(capabilities, settings, config)
+    assert capabilities["systemPort"] == 8202
+
+
+def test_apply_xdist_worker_isolation_ios_respects_explicit_ports() -> None:
+    config = SimpleNamespace(workerinput={"workerid": "gw1"})
+    settings = SimpleNamespace(platform="ios")
+    capabilities = {"wdaLocalPort": 9900}
+
+    pytest_plugin._apply_xdist_worker_isolation(capabilities, settings, config)
+    assert capabilities["wdaLocalPort"] == 9900
+    assert capabilities["webkitDebugProxyPort"] == 27754
+
+
+def test_merge_xdist_worker_reports_writes_merged_summary(tmp_path: Path) -> None:
+    report_dir = tmp_path / "report"
+    worker_a = report_dir / "workers" / "gw0"
+    worker_b = report_dir / "workers" / "gw1"
+    worker_a.mkdir(parents=True)
+    worker_b.mkdir(parents=True)
+
+    (worker_a / "summary.json").write_text(
+        json.dumps(
+            {
+                "totals": {"passed": 1, "failed": 0, "skipped": 0},
+                "tests": [{"nodeid": "a::test_one", "outcome": "passed", "duration": 1.0}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (worker_b / "summary.json").write_text(
+        json.dumps(
+            {
+                "totals": {"passed": 0, "failed": 1, "skipped": 0},
+                "tests": [{"nodeid": "b::test_two", "outcome": "failed", "duration": 1.5}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    merged_path = pytest_plugin._merge_xdist_worker_reports(report_dir)
+    assert merged_path == report_dir / "summary.json"
+    merged = json.loads((report_dir / "summary.json").read_text(encoding="utf-8"))
+    assert merged["totals"] == {"passed": 1, "failed": 1, "skipped": 0}
+    assert len(merged["tests"]) == 2
+
+
+def test_pytest_configure_skips_cleanup_in_xdist_worker(monkeypatch, tmp_path: Path) -> None:
+    config = _ConfigureConfig(workerinput={"workerid": "gw0"}, has_xdist=True)
+    settings = pytest_plugin.AppiumPytestKitSettings(
+        clean_artifacts_on_start=True,
+        artifacts_dir=tmp_path / "artifacts",
+    )
+
+    monkeypatch.setattr(pytest_plugin, "load_settings", lambda env_file=None: settings)
+    monkeypatch.setattr(pytest_plugin, "apply_cli_overrides", lambda current, _overrides: current)
+    cleanup_mock = MagicMock()
+    monkeypatch.setattr(pytest_plugin, "_cleanup_artifacts_dir", cleanup_mock)
+
+    pytest_plugin.pytest_configure(config)  # type: ignore[arg-type]
+    cleanup_mock.assert_not_called()
+
+
+def test_pytest_sessionfinish_merges_xdist_reports_on_controller(tmp_path: Path) -> None:
+    report_dir = tmp_path / "report"
+    worker_dir = report_dir / "workers" / "gw0"
+    worker_dir.mkdir(parents=True)
+    (worker_dir / "summary.json").write_text(
+        json.dumps(
+            {
+                "tests": [{"nodeid": "tests::test_a", "outcome": "passed", "duration": 1.0}],
+                "totals": {"passed": 1, "failed": 0, "skipped": 0},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    settings = pytest_plugin.AppiumPytestKitSettings(
+        reporting_enabled=True,
+        report_dir=report_dir,
+    )
+    config = _ConfigureConfig(workerinput=None, has_xdist=True)
+    config.stash[pytest_plugin.SETTINGS_KEY] = settings
+    config.stash[pytest_plugin.REPORTER_KEY] = None
+    config.stash[pytest_plugin.RETRY_DRIVER_REGISTRY_KEY] = {}
+    config.stash[pytest_plugin.RETRY_RECORDER_REGISTRY_KEY] = {}
+
+    session = SimpleNamespace(config=config)
+    pytest_plugin.pytest_sessionfinish(session, 0)  # type: ignore[arg-type]
+
+    merged_payload = json.loads((report_dir / "summary.json").read_text(encoding="utf-8"))
+    assert merged_payload["totals"] == {"passed": 1, "failed": 0, "skipped": 0}

@@ -213,6 +213,18 @@ class TestLaunchValidation:
         with pytest.raises(LaunchValidationError):
             validate_launch_config(s)
 
+    def test_android_with_auto_discovered_app_passes(self, tmp_path: Path) -> None:
+        builds = tmp_path / "app_builds" / "android"
+        builds.mkdir(parents=True)
+        (builds / "demo.apk").write_bytes(b"apk")
+
+        s = _make_settings(
+            platform="android",
+            app_auto_discover=True,
+            app_builds_dir=tmp_path / "app_builds",
+        )
+        validate_launch_config(s)
+
     def test_ios_with_app_passes(self) -> None:
         s = _make_settings(platform="ios", app="/path/app.ipa")
         validate_launch_config(s)
@@ -225,3 +237,15 @@ class TestLaunchValidation:
         s = _make_settings(platform="ios")
         with pytest.raises(LaunchValidationError):
             validate_launch_config(s)
+
+    def test_ios_with_auto_discovered_app_passes(self, tmp_path: Path) -> None:
+        builds = tmp_path / "app_builds" / "ios" / "device"
+        builds.mkdir(parents=True)
+        (builds / "demo.ipa").write_bytes(b"ipa")
+
+        s = _make_settings(
+            platform="ios",
+            app_auto_discover=True,
+            app_builds_dir=tmp_path / "app_builds",
+        )
+        validate_launch_config(s)

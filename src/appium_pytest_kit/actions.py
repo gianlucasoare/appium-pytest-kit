@@ -51,6 +51,63 @@ class MobileActions:
         except Exception:
             return False
 
+    def click_by_attribute_value(
+        self,
+        locator: Locator,
+        attr: str,
+        expected: str,
+        *,
+        timeout: float | None = None,
+    ) -> bool:
+        """Click the first element matching *locator* whose attribute equals *expected*."""
+
+        effective_timeout = timeout if timeout is not None else self._waiter.default_timeout
+        logger.debug(
+            "click_by_attribute_value  locator=%s  attr=%s  expected=%r  timeout=%.1fs",
+            locator,
+            attr,
+            expected,
+            effective_timeout,
+        )
+
+        by, value = locator
+
+        def _find_and_click(driver):
+            try:
+                elements = driver.find_elements(by, value)
+            except Exception:
+                return False
+            for element in elements:
+                try:
+                    actual = element.get_attribute(attr)
+                except Exception:
+                    continue
+                if actual is None or str(actual) != expected:
+                    continue
+                element.click()
+                return True
+            return False
+
+        try:
+            self._waiter.until(
+                _find_and_click,
+                timeout=effective_timeout,
+                message=(
+                    f"No element matching {locator} had attribute {attr!r} == {expected!r}"
+                ),
+                locator=locator,
+            )
+            return True
+        except WebDriverException as exc:
+            raise ActionError(
+                (
+                    f"click_by_attribute_value failed for locator={locator}, "
+                    f"attribute={attr!r}, expected={expected!r}"
+                ),
+                locator=locator,
+                action="click_by_attribute_value",
+            ) from exc
+
     def tap_if_present_first_available(
         self,
         locators: Iterable[Locator],
@@ -852,13 +909,9 @@ class MobileActions:
         """Switch the driver to the first available WEBVIEW context."""
 
         try:
-            contexts = self._driver.contexts
-            for ctx in contexts:
-                if "WEBVIEW" in ctx:
-                    self._driver.switch_to.context(ctx)
-                    return
-            msg = "No WEBVIEW context found"
-            raise ActionError(msg, action="switch_to_webview")
+            self._driver.switch_to.context(self.get_webview_context_name())
+        except ActionError as exc:
+            raise ActionError(str(exc), action="switch_to_webview") from exc
         except WebDriverException as exc:
             raise ActionError("switch_to_webview failed", action="switch_to_webview") from exc
 
@@ -869,3 +922,55 @@ class MobileActions:
             self._driver.switch_to.context("NATIVE_APP")
         except WebDriverException as exc:
             raise ActionError("switch_to_native failed", action="switch_to_native") from exc
+
+    def get_webview_context_name(self) -> str:
+        """Return the first WEBVIEW context name, or raise ActionError when unavailable."""
+
+        try:
+            contexts = self._driver.contexts
+            for ctx in contexts:
+                if "WEBVIEW" in ctx:
+                    return ctx
+        except WebDriverException as exc:
+            raise ActionError(
+                "get_webview_context_name failed",
+                action="get_webview_context_name",
+            ) from exc
+        msg = "No WEBVIEW context found"
+        raise ActionError(msg, action="get_webview_context_name")
+
+    def switch_to_frame(self, css_selector: str, *, timeout: float | None = None) -> None:
+        """Switch into a frame element located by CSS selector in the active WEBVIEW."""
+
+        effective_timeout = timeout if timeout is not None else self._waiter.default_timeout
+        logger.debug("switch_to_frame  selector=%s  timeout=%.1fs", css_selector, effective_timeout)
+
+        def _find_frame(driver):
+            try:
+                return driver.find_element("css selector", css_selector)
+            except Exception:
+                return False
+
+        try:
+            frame = self._waiter.until(
+                _find_frame,
+                timeout=effective_timeout,
+                message=f"Frame not found for selector: {css_selector}",
+            )
+            self._driver.switch_to.frame(frame)
+        except WebDriverException as exc:
+            raise ActionError(
+                f"switch_to_frame({css_selector!r}) failed",
+                action="switch_to_frame",
+            ) from exc
+
+    def switch_to_default_frame(self) -> None:
+        """Switch to the top-level document in active WEBVIEW context."""
+
+        try:
+            self._driver.switch_to.default_content()
+        except WebDriverException as exc:
+            raise ActionError(
+                "switch_to_default_frame failed",
+                action="switch_to_default_frame",
+            ) from exc
