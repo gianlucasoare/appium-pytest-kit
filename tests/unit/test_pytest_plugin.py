@@ -238,6 +238,18 @@ def test_apply_xdist_worker_isolation_ios_respects_explicit_ports() -> None:
     assert capabilities["webkitDebugProxyPort"] == 27754
 
 
+def test_xdist_worker_id_does_not_use_env_when_workerinput_is_explicit_none(monkeypatch) -> None:
+    config = SimpleNamespace(workerinput=None)
+    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw7")
+    assert pytest_plugin._xdist_worker_id(config) is None
+
+
+def test_xdist_worker_id_uses_env_when_workerinput_attribute_is_missing(monkeypatch) -> None:
+    config = SimpleNamespace()
+    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw3")
+    assert pytest_plugin._xdist_worker_id(config) == "gw3"
+
+
 def test_merge_xdist_worker_reports_writes_merged_summary(tmp_path: Path) -> None:
     report_dir = tmp_path / "report"
     worker_a = report_dir / "workers" / "gw0"

@@ -66,11 +66,13 @@ _WORKER_INDEX_RE = re.compile(r"(\d+)$")
 
 
 def _xdist_worker_id(config: Config) -> str | None:
-    worker_input = getattr(config, "workerinput", None)
-    if isinstance(worker_input, dict):
-        worker_id = worker_input.get("workerid")
-        if worker_id:
-            return str(worker_id)
+    if hasattr(config, "workerinput"):
+        worker_input = config.workerinput
+        if isinstance(worker_input, dict):
+            worker_id = worker_input.get("workerid")
+            if worker_id:
+                return str(worker_id)
+        return None
     worker_id = os.getenv("PYTEST_XDIST_WORKER")
     return worker_id or None
 
@@ -116,9 +118,10 @@ def _apply_xdist_worker_isolation(
         return
 
     index = _xdist_worker_index(worker_id)
-    if settings.platform == "android":
+    platform = str(getattr(settings, "platform", "")).strip().lower()
+    if platform == "android":
         _set_default_capability(capabilities, "systemPort", 8200 + index)
-    elif settings.platform == "ios":
+    elif platform == "ios":
         _set_default_capability(capabilities, "wdaLocalPort", 8100 + index)
         _set_default_capability(capabilities, "webkitDebugProxyPort", 27753 + index)
 
@@ -141,10 +144,13 @@ def _warn_xdist_port_collisions(
         warned = stash.get(XDIST_WARNED_COLLISION_KEYS, set())
         stash[XDIST_WARNED_COLLISION_KEYS] = warned
 
-    candidate_keys = ["systemPort"] if settings.platform == "android" else [
-        "wdaLocalPort",
-        "webkitDebugProxyPort",
-    ]
+    platform = str(getattr(settings, "platform", "")).strip().lower()
+    if platform == "android":
+        candidate_keys = ["systemPort"]
+    elif platform == "ios":
+        candidate_keys = ["wdaLocalPort", "webkitDebugProxyPort"]
+    else:
+        return
     for key in candidate_keys:
         if _is_capability_missing(capabilities, key):
             continue
