@@ -1,15 +1,15 @@
 """Tests for artifact capture helpers."""
 
+import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock
-import subprocess
 
 from appium_pytest_kit._internal.diagnostics import (
     _safe_filename,
     capture_device_logs,
     capture_page_source,
-    capture_session_log,
     capture_screenshot,
+    capture_session_log,
 )
 
 

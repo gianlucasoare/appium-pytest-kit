@@ -271,6 +271,114 @@ def test_merge_xdist_worker_reports_writes_merged_summary(tmp_path: Path) -> Non
     assert len(merged["tests"]) == 2
 
 
+def test_merge_xdist_flake_reports_writes_merged_summary(tmp_path: Path) -> None:
+    report_dir = tmp_path / "report"
+    worker_a = report_dir / "workers" / "gw0"
+    worker_b = report_dir / "workers" / "gw1"
+    worker_a.mkdir(parents=True)
+    worker_b.mkdir(parents=True)
+
+    (worker_a / "flake-summary.json").write_text(
+        json.dumps(
+            {
+                "summary": {"retries_executed_total": 1},
+                "tests": [
+                    {
+                        "nodeid": "tests::flaky_a",
+                        "failures": 1,
+                        "max_retries": 2,
+                        "final_outcome": "passed_after_retry",
+                    }
+                ],
+                "flaky_tests": ["tests::flaky_a"],
+                "final_failed_after_retries": [],
+                "top_failure_signatures": [{"signature": "WaitTimeoutError", "count": 1}],
+                "top_failing_locators": [{"locator": "id=btn_login", "count": 1}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (worker_b / "flake-summary.json").write_text(
+        json.dumps(
+            {
+                "summary": {"retries_executed_total": 2},
+                "tests": [
+                    {
+                        "nodeid": "tests::flaky_b",
+                        "failures": 2,
+                        "max_retries": 2,
+                        "final_outcome": "failed_after_retries",
+                    }
+                ],
+                "flaky_tests": [],
+                "final_failed_after_retries": ["tests::flaky_b"],
+                "top_failure_signatures": [{"signature": "WaitTimeoutError", "count": 2}],
+                "top_failing_locators": [{"locator": "id=btn_login", "count": 2}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    merged_path = pytest_plugin._merge_xdist_flake_reports(report_dir)
+    assert merged_path == report_dir / "flake-summary.json"
+    merged = json.loads((report_dir / "flake-summary.json").read_text(encoding="utf-8"))
+    assert merged["summary"]["retries_executed_total"] == 3
+    assert merged["summary"]["flaky_tests"] == 1
+    assert merged["summary"]["final_failed_after_retries"] == 1
+    assert merged["top_failure_signatures"][0]["count"] == 3
+    assert merged["top_failing_locators"][0]["count"] == 3
+
+
+def test_write_flake_trend_report_tracks_history_and_delta(tmp_path: Path) -> None:
+    report_dir = tmp_path / "report"
+    first_payload = {
+        "summary": {
+            "tests_with_retries": 1,
+            "flaky_tests": 1,
+            "final_failed_after_retries": 0,
+            "retries_executed_total": 1,
+        },
+        "top_failure_signatures": [{"signature": "Timeout", "count": 1}],
+        "top_failing_locators": [{"locator": "id=btn_login", "count": 1}],
+    }
+    second_payload = {
+        "summary": {
+            "tests_with_retries": 3,
+            "flaky_tests": 2,
+            "final_failed_after_retries": 1,
+            "retries_executed_total": 4,
+        },
+        "top_failure_signatures": [{"signature": "NoSuchElement", "count": 2}],
+        "top_failing_locators": [{"locator": "id=btn_submit", "count": 2}],
+    }
+
+    pytest_plugin._write_flake_trend_report(report_dir, first_payload, history_limit=10)
+    trend_path = pytest_plugin._write_flake_trend_report(
+        report_dir,
+        second_payload,
+        history_limit=10,
+    )
+
+    trend = json.loads(trend_path.read_text(encoding="utf-8"))
+    assert trend["trend"]["runs_tracked"] == 2
+    assert trend["trend"]["latest_summary"]["flaky_tests"] == 2
+    assert trend["trend"]["previous_summary"]["flaky_tests"] == 1
+    assert trend["trend"]["delta_from_previous"]["flaky_tests"] == 1
+    assert trend["trend"]["delta_from_previous"]["retries_executed_total"] == 3
+    assert len(trend["history"]) == 2
+
+
+def test_warn_xdist_port_collisions_logs_warning(caplog) -> None:
+    config = SimpleNamespace(workerinput={"workerid": "gw0"}, stash={})
+    settings = SimpleNamespace(platform="android")
+    capabilities = {"systemPort": 8200}
+
+    with caplog.at_level("WARNING"):
+        pytest_plugin._warn_xdist_port_collisions(capabilities, settings, config)
+
+    assert "xdist:explicit_port" in caplog.text
+
+
 def test_pytest_configure_skips_cleanup_in_xdist_worker(monkeypatch, tmp_path: Path) -> None:
     config = _ConfigureConfig(workerinput={"workerid": "gw0"}, has_xdist=True)
     settings = pytest_plugin.AppiumPytestKitSettings(
@@ -300,6 +408,31 @@ def test_pytest_sessionfinish_merges_xdist_reports_on_controller(tmp_path: Path)
         ),
         encoding="utf-8",
     )
+    (worker_dir / "flake-summary.json").write_text(
+        json.dumps(
+            {
+                "summary": {
+                    "tests_with_retries": 1,
+                    "flaky_tests": 1,
+                    "final_failed_after_retries": 0,
+                    "retries_executed_total": 1,
+                },
+                "tests": [
+                    {
+                        "nodeid": "tests::test_a",
+                        "failures": 1,
+                        "max_retries": 1,
+                        "final_outcome": "passed_after_retry",
+                    }
+                ],
+                "flaky_tests": ["tests::test_a"],
+                "final_failed_after_retries": [],
+                "top_failure_signatures": [{"signature": "Timeout", "count": 1}],
+                "top_failing_locators": [{"locator": "id=btn_login", "count": 1}],
+            }
+        ),
+        encoding="utf-8",
+    )
 
     settings = pytest_plugin.AppiumPytestKitSettings(
         reporting_enabled=True,
@@ -316,3 +449,7 @@ def test_pytest_sessionfinish_merges_xdist_reports_on_controller(tmp_path: Path)
 
     merged_payload = json.loads((report_dir / "summary.json").read_text(encoding="utf-8"))
     assert merged_payload["totals"] == {"passed": 1, "failed": 0, "skipped": 0}
+    merged_flake = json.loads((report_dir / "flake-summary.json").read_text(encoding="utf-8"))
+    assert merged_flake["summary"]["flaky_tests"] == 1
+    merged_trend = json.loads((report_dir / "flake-trend.json").read_text(encoding="utf-8"))
+    assert merged_trend["trend"]["runs_tracked"] == 1

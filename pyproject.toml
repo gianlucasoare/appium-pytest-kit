@@ -54,6 +54,7 @@ all = [
 
 [project.scripts]
 appium-pytest-kit-init = "appium_pytest_kit.cli:main"
+appium-pytest-kit-doctor = "appium_pytest_kit.cli:doctor_main"
 
 [project.entry-points.pytest11]
 appium-pytest-kit = "appium_pytest_kit.pytest_plugin"

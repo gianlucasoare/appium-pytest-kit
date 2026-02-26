@@ -134,6 +134,7 @@ pip install "appium-pytest-kit[all]"
 ```bash
 # Check the CLI tool is available
 appium-pytest-kit-init --help
+appium-pytest-kit-doctor --help
 
 # Check the package version
 python -c "import appium_pytest_kit; print(appium_pytest_kit.__version__)"
@@ -141,6 +142,20 @@ python -c "import appium_pytest_kit; print(appium_pytest_kit.__version__)"
 # Confirm the pytest plugin is registered
 pytest --co -q  # should not error even with no test files
 ```
+
+---
+
+## Maintainer release flow
+
+This repo ships `.github/workflows/release.yml` for Trusted Publishing to PyPI.
+Create and push a version tag (for example `v0.1.8`) to run tests, build artifacts,
+verify `vX.Y.Z` matches `project.version`, and publish automatically.
+
+The `publish` job is tag-guarded, so manual workflow runs from branches do not
+upload to PyPI.
+
+For release notes, run `.github/workflows/changelog.yml` (manual dispatch) to
+generate a `CHANGELOG.md` section and open a PR.
 
 ---
 

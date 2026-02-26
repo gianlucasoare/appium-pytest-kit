@@ -33,3 +33,49 @@ jobs:
 
       - name: Example collection check
         run: pytest --collect-only examples/basic/tests -q
+
+  optional-extras:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        extra: ["yaml", "allure", "retry", "all"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package with optional extra
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,${{ matrix.extra }}]"
+
+      - name: Dependency health check
+        run: python -m pip check
+
+      - name: Import smoke check
+        run: python -c "import appium_pytest_kit as kit; print(kit.__version__)"
+
+  xdist:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package with xdist support
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,xdist,retry]"
+
+      - name: Unit tests (xdist)
+        run: pytest -q -n 2

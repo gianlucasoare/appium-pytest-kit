@@ -2,8 +2,20 @@
 
 
 import argparse
+import json
+import re
+import subprocess
 from collections.abc import Sequence
+from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
+from urllib.error import URLError
+from urllib.parse import urlparse, urlunparse
+from urllib.request import urlopen
+
+from appium_pytest_kit._internal.device_resolver import validate_launch_config
+from appium_pytest_kit.errors import LaunchValidationError
+from appium_pytest_kit.settings import AppiumPytestKitSettings, load_settings
 
 ENV_TEMPLATE = """\
 # appium-pytest-kit configuration
@@ -240,6 +252,216 @@ artifacts/
 """
 
 
+@dataclass(slots=True)
+class DoctorCheck:
+    """Single doctor check result row."""
+
+    name: str
+    status: str
+    details: str
+
+
+def _status_endpoint(server_url: str) -> str:
+    parsed = urlparse(server_url)
+    base_path = parsed.path.rstrip("/")
+    path = f"{base_path}/status" if base_path else "/status"
+    return urlunparse(parsed._replace(path=path, params="", query="", fragment=""))
+
+
+def _run_command(
+    command: Sequence[str],
+    *,
+    timeout: float = 8.0,
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        list(command),
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+
+
+def _render_command_output(process: subprocess.CompletedProcess[str]) -> str:
+    output = (process.stdout or "").strip() or (process.stderr or "").strip()
+    if not output:
+        return "no output"
+    first = output.splitlines()[0].strip()
+    return first or "no output"
+
+
+def _tool_check(name: str, command: Sequence[str], *, timeout: float = 8.0) -> DoctorCheck:
+    try:
+        process = _run_command(command, timeout=timeout)
+    except FileNotFoundError:
+        return DoctorCheck(name=name, status="fail", details=f"{command[0]} not found on PATH")
+    except subprocess.TimeoutExpired:
+        return DoctorCheck(name=name, status="fail", details=f"{command[0]} check timed out")
+
+    if process.returncode != 0:
+        return DoctorCheck(
+            name=name,
+            status="fail",
+            details=f"command failed ({process.returncode}): {_render_command_output(process)}",
+        )
+    return DoctorCheck(name=name, status="pass", details=_render_command_output(process))
+
+
+def _parse_driver_names(payload: str) -> list[str]:
+    names: set[str] = set()
+
+    try:
+        decoded = json.loads(payload)
+    except ValueError:
+        decoded = None
+
+    if isinstance(decoded, dict):
+        installed = decoded.get("installed")
+        if isinstance(installed, list):
+            for entry in installed:
+                if isinstance(entry, str):
+                    names.add(entry.lower())
+                elif isinstance(entry, dict):
+                    raw = entry.get("name") or entry.get("driverName")
+                    if raw:
+                        names.add(str(raw).lower())
+    elif isinstance(decoded, list):
+        for entry in decoded:
+            if isinstance(entry, str):
+                names.add(entry.lower())
+            elif isinstance(entry, dict):
+                raw = entry.get("name") or entry.get("driverName")
+                if raw:
+                    names.add(str(raw).lower())
+
+    if not names:
+        for match in re.findall(r"(uiautomator2|xcuitest|espresso)", payload, flags=re.IGNORECASE):
+            names.add(match.lower())
+    return sorted(names)
+
+
+def _expected_driver(settings: AppiumPytestKitSettings) -> str:
+    if settings.platform == "ios":
+        return "xcuitest"
+    automation = (settings.automation_name or "UiAutomator2").strip().lower()
+    if automation == "espresso":
+        return "espresso"
+    return "uiautomator2"
+
+
+def _driver_check(settings: AppiumPytestKitSettings, *, timeout: float = 8.0) -> DoctorCheck:
+    command = ["appium", "driver", "list", "--installed", "--json"]
+    try:
+        process = _run_command(command, timeout=timeout)
+    except FileNotFoundError:
+        return DoctorCheck(
+            name="appium drivers",
+            status="fail",
+            details="appium not found on PATH; cannot inspect installed drivers",
+        )
+    except subprocess.TimeoutExpired:
+        return DoctorCheck(
+            name="appium drivers",
+            status="warn",
+            details="driver list command timed out",
+        )
+
+    if process.returncode != 0:
+        return DoctorCheck(
+            name="appium drivers",
+            status="warn",
+            details=f"could not list drivers: {_render_command_output(process)}",
+        )
+
+    drivers = _parse_driver_names((process.stdout or "").strip())
+    expected = _expected_driver(settings)
+    if not drivers:
+        return DoctorCheck(
+            name="appium drivers",
+            status="warn",
+            details="no installed drivers detected from command output",
+        )
+    if expected not in drivers:
+        return DoctorCheck(
+            name="appium drivers",
+            status="fail",
+            details=(
+                f"expected '{expected}' for platform={settings.platform}, "
+                f"found: {', '.join(drivers)}"
+            ),
+        )
+    return DoctorCheck(
+        name="appium drivers",
+        status="pass",
+        details=f"{', '.join(drivers)}",
+    )
+
+
+def _server_check(settings: AppiumPytestKitSettings, *, timeout: float = 5.0) -> DoctorCheck:
+    if settings.manage_appium_server:
+        return DoctorCheck(
+            name="appium server",
+            status="warn",
+            details="APP_MANAGE_APPIUM_SERVER=true (server is started by the test session)",
+        )
+
+    status_url = _status_endpoint(settings.appium_url)
+    try:
+        with urlopen(status_url, timeout=max(timeout, 1.0)) as response:  # nosec B310
+            payload = response.read().decode("utf-8", errors="replace")
+    except (OSError, URLError) as exc:
+        return DoctorCheck(
+            name="appium server",
+            status="fail",
+            details=f"{status_url} unreachable: {exc}",
+        )
+
+    try:
+        decoded = json.loads(payload)
+    except ValueError:
+        return DoctorCheck(
+            name="appium server",
+            status="fail",
+            details=f"{status_url} returned invalid JSON",
+        )
+
+    value = decoded.get("value") if isinstance(decoded, dict) else None
+    if isinstance(value, dict) and value.get("ready") is False:
+        return DoctorCheck(name="appium server", status="fail", details=f"{status_url} ready=false")
+
+    return DoctorCheck(name="appium server", status="pass", details=f"{status_url} reachable")
+
+
+def _launch_config_check(settings: AppiumPytestKitSettings) -> DoctorCheck:
+    try:
+        validate_launch_config(settings)
+        return DoctorCheck(
+            name="launch config",
+            status="pass",
+            details="launch settings look valid",
+        )
+    except LaunchValidationError as exc:
+        return DoctorCheck(name="launch config", status="warn", details=str(exc))
+
+
+def _artifacts_check(settings: AppiumPytestKitSettings) -> DoctorCheck:
+    try:
+        settings.artifacts_dir.mkdir(parents=True, exist_ok=True)
+        probe = settings.artifacts_dir / ".doctor-write-probe"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+    except OSError as exc:
+        return DoctorCheck(
+            name="artifacts dir",
+            status="warn",
+            details=f"{settings.artifacts_dir} is not writable: {exc}",
+        )
+    return DoctorCheck(
+        name="artifacts dir",
+        status="pass",
+        details=f"{settings.artifacts_dir} writable",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build CLI parser for `appium-pytest-kit-init`."""
 
@@ -266,6 +488,36 @@ def build_parser() -> argparse.ArgumentParser:
         "--root",
         default=".",
         help="Root directory for the framework scaffold (default: current directory)",
+    )
+    return parser
+
+
+def build_doctor_parser() -> argparse.ArgumentParser:
+    """Build CLI parser for `appium-pytest-kit-doctor`."""
+
+    parser = argparse.ArgumentParser(
+        description="Run environment and configuration diagnostics for appium-pytest-kit"
+    )
+    parser.add_argument(
+        "--env-file",
+        default=None,
+        help="Path to env file to validate (default: .env)",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=5.0,
+        help="Timeout in seconds for server and command probes (default: 5)",
+    )
+    parser.add_argument(
+        "--no-server-check",
+        action="store_true",
+        help="Skip Appium /status reachability check",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print machine-readable JSON output",
     )
     return parser
 
@@ -340,3 +592,66 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     print(f"Skipped {output_path} (already exists). Use --force to overwrite.")
     return 0
+
+
+def doctor_main(argv: Sequence[str] | None = None) -> int:
+    """CLI entry point used by `appium-pytest-kit-doctor`."""
+
+    parser = build_doctor_parser()
+    args = parser.parse_args(argv)
+
+    checks: list[DoctorCheck] = []
+
+    try:
+        settings = load_settings(env_file=args.env_file)
+        checks.append(DoctorCheck("config load", "pass", "settings loaded successfully"))
+    except Exception as exc:
+        checks.append(DoctorCheck("config load", "fail", str(exc)))
+        settings = None
+
+    checks.append(_tool_check("appium cli", ["appium", "--version"], timeout=args.timeout))
+
+    if settings is not None:
+        if settings.platform == "android":
+            checks.append(_tool_check("adb", ["adb", "version"], timeout=args.timeout))
+        elif settings.platform == "ios":
+            checks.append(_tool_check("xcrun", ["xcrun", "--version"], timeout=args.timeout))
+
+        checks.append(_driver_check(settings, timeout=args.timeout))
+        checks.append(_launch_config_check(settings))
+        checks.append(_artifacts_check(settings))
+        if args.no_server_check:
+            checks.append(
+                DoctorCheck(
+                    "appium server",
+                    "warn",
+                    "server check skipped by --no-server-check",
+                )
+            )
+        else:
+            checks.append(_server_check(settings, timeout=args.timeout))
+
+    passed = sum(1 for check in checks if check.status == "pass")
+    warned = sum(1 for check in checks if check.status == "warn")
+    failed = sum(1 for check in checks if check.status == "fail")
+
+    if args.json:
+        payload: dict[str, Any] = {
+            "ok": failed == 0,
+            "summary": {
+                "total": len(checks),
+                "passed": passed,
+                "warned": warned,
+                "failed": failed,
+            },
+            "checks": [asdict(check) for check in checks],
+        }
+        print(json.dumps(payload, indent=2))
+        return 1 if failed else 0
+
+    for check in checks:
+        label = check.status.upper()
+        print(f"[{label}] {check.name}: {check.details}")
+
+    print(f"\nSummary: total={len(checks)} passed={passed} warned={warned} failed={failed}")
+    return 1 if failed else 0

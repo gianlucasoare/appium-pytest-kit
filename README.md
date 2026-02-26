@@ -81,6 +81,27 @@ cd appium-pytest-kit
 pip install -e ".[dev]"
 ```
 
+### Environment doctor
+
+Validate your local setup (tools, drivers, config, Appium reachability):
+
+```bash
+appium-pytest-kit-doctor
+appium-pytest-kit-doctor --env-file .env.staging
+appium-pytest-kit-doctor --json
+```
+
+### Automated PyPI release
+
+The repository includes a GitHub Actions release workflow with Trusted Publishing:
+- workflow file: `.github/workflows/release.yml`
+- trigger: push a tag like `v0.1.8`
+- behavior: run tests, build `sdist` + wheel, verify tag/version match, publish to PyPI via OIDC
+- publish guard: `publish` job runs only for `refs/tags/v*`
+
+Changelog automation is also available via `.github/workflows/changelog.yml`
+(`workflow_dispatch`) to generate a release section in `CHANGELOG.md` and open a PR.
+
 ---
 
 ## Quickstart: test an app in 5 minutes

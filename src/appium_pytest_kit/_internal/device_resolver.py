@@ -249,7 +249,11 @@ class DeviceResolver:
                 continue
             name = parts[0].strip()
             lowered_name = name.lower()
-            if lowered_name in {"mac", "my mac"} or "macbook" in lowered_name or "imac" in lowered_name:
+            if (
+                lowered_name in {"mac", "my mac"}
+                or "macbook" in lowered_name
+                or "imac" in lowered_name
+            ):
                 continue
 
             version = parts[1].rstrip(")").strip() or None
@@ -269,8 +273,8 @@ class DeviceResolver:
 
 def validate_launch_config(settings: "AppiumPytestKitSettings") -> None:
     """Raise LaunchValidationError when required app launch settings are missing."""
-    from appium_pytest_kit.errors import LaunchValidationError
     from appium_pytest_kit.driver import discover_latest_app_build
+    from appium_pytest_kit.errors import LaunchValidationError
 
     resolved_app = settings.app or discover_latest_app_build(settings)
 

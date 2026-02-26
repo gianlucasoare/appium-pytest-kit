@@ -134,8 +134,20 @@ After the session, `artifacts/appium-pytest-kit/summary.json` is written:
 }
 ```
 
+When retries are enabled, `artifacts/appium-pytest-kit/flake-summary.json` is
+also written with:
+- tests that needed retries
+- flaky tests that passed after retry
+- tests that still failed after all retries
+- top failure signatures and locator patterns
+
+Additionally, `artifacts/appium-pytest-kit/flake-trend.json` keeps a rolling
+history of recent runs (default last 30) and computes deltas vs the previous run.
+
 With `pytest-xdist`, each worker writes its own intermediate summary and the
 controller merges them into a single final `summary.json`.
+The same merge is applied for `flake-summary.json`, and the controller updates
+`flake-trend.json` from the merged flake summary.
 
 Only the `call` phase is recorded (setup/teardown failures are tracked by pytest separately).
 

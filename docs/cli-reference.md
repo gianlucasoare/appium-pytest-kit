@@ -38,6 +38,33 @@ appium-pytest-kit-init --framework --root my-project --force
 
 ---
 
+## `appium-pytest-kit-doctor`
+
+Runs local diagnostics for tools, Appium drivers/server reachability, and config sanity.
+
+```bash
+# Run all checks against .env
+appium-pytest-kit-doctor
+
+# Use a custom env file
+appium-pytest-kit-doctor --env-file envs/staging.env
+
+# Skip server /status reachability probe
+appium-pytest-kit-doctor --no-server-check
+
+# JSON output for CI scripts
+appium-pytest-kit-doctor --json
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--env-file PATH` | `.env` | Env file to validate |
+| `--timeout SECS` | `5.0` | Timeout used by command and server probes |
+| `--no-server-check` | off | Skip Appium `/status` reachability check |
+| `--json` | off | Print machine-readable JSON output |
+
+---
+
 ## `pytest` CLI flags
 
 All flags below are registered by the plugin and take precedence over `.env`
@@ -455,6 +482,7 @@ Worker isolation applied automatically:
   `webkitDebugProxyPort = 27753 + worker_index` when not explicitly provided.
 - Managed server mode: each worker starts Appium on
   `APP_APPIUM_PORT + worker_index`.
+- If you explicitly set these ports, the kit logs a collision warning under xdist.
 
 ### Per-test marker
 

@@ -1,0 +1,52 @@
+name: Changelog
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (without leading v)"
+        required: true
+        type: string
+      previous_tag:
+        description: "Optional previous tag for commit range (e.g. v0.1.6)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Generate changelog section
+        run: |
+          if [ -n "${{ github.event.inputs.previous_tag }}" ]; then
+            python scripts/update_changelog.py \
+              --version "${{ github.event.inputs.version }}" \
+              --previous-tag "${{ github.event.inputs.previous_tag }}"
+          else
+            python scripts/update_changelog.py \
+              --version "${{ github.event.inputs.version }}"
+          fi
+
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: codex/changelog-v${{ github.event.inputs.version }}
+          title: docs(changelog): prepare v${{ github.event.inputs.version }}
+          commit-message: docs(changelog): prepare v${{ github.event.inputs.version }}
+          body: |
+            Automated changelog update for `v${{ github.event.inputs.version }}`.
+          labels: documentation,release

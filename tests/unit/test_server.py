@@ -28,7 +28,7 @@ def test_status_endpoint_appends_status_preserving_base_path() -> None:
         manage_appium_server=False,
     )
     manager = AppiumServerManager(settings)
-    endpoint = manager._status_endpoint(settings.appium_url)  # noqa: SLF001
+    endpoint = manager._status_endpoint(settings.appium_url)
     assert endpoint == "http://127.0.0.1:4723/wd/hub/status"
 
 

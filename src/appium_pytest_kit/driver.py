@@ -1,9 +1,9 @@
 """Driver configuration and construction utilities."""
 
 
+import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
-import logging
 from pathlib import Path
 from typing import Any
 

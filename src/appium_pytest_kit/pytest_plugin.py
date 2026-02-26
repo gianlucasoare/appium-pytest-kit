@@ -6,6 +6,8 @@ import logging
 import os
 import re
 import shutil
+from collections import Counter
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -22,8 +24,8 @@ from appium_pytest_kit._internal.diagnostics import (
     attach_to_allure,
     capture_device_logs,
     capture_page_source,
-    capture_session_log,
     capture_screenshot,
+    capture_session_log,
 )
 from appium_pytest_kit._internal.reporting import SessionReportCollector
 from appium_pytest_kit._internal.server import AppiumServerInfo, AppiumServerManager
@@ -58,6 +60,8 @@ RETRY_FAIL_COUNT_KEY: StashKey[dict[str, int]] = StashKey()
 # Set on a node's stash when the driver must survive the current teardown
 # because another retry attempt is coming for the same test.
 KEEP_DRIVER_ALIVE_KEY: StashKey[bool] = StashKey()
+FLAKE_ANALYTICS_KEY: StashKey[dict[str, Any]] = StashKey()
+XDIST_WARNED_COLLISION_KEYS: StashKey[set[str]] = StashKey()
 _WORKER_INDEX_RE = re.compile(r"(\d+)$")
 
 
@@ -117,6 +121,350 @@ def _apply_xdist_worker_isolation(
     elif settings.platform == "ios":
         _set_default_capability(capabilities, "wdaLocalPort", 8100 + index)
         _set_default_capability(capabilities, "webkitDebugProxyPort", 27753 + index)
+
+
+def _warn_xdist_port_collisions(
+    capabilities: dict[str, Any],
+    settings: AppiumPytestKitSettings,
+    config: Config,
+) -> None:
+    """Warn when xdist is active and explicit static ports may collide across workers."""
+
+    worker_id = _xdist_worker_id(config)
+    if worker_id is None:
+        return
+
+    stash = getattr(config, "stash", None)
+    if stash is None:
+        warned: set[str] = set()
+    else:
+        warned = stash.get(XDIST_WARNED_COLLISION_KEYS, set())
+        stash[XDIST_WARNED_COLLISION_KEYS] = warned
+
+    candidate_keys = ["systemPort"] if settings.platform == "android" else [
+        "wdaLocalPort",
+        "webkitDebugProxyPort",
+    ]
+    for key in candidate_keys:
+        if _is_capability_missing(capabilities, key):
+            continue
+        marker = f"{worker_id}:{key}:{capabilities.get(key)!r}"
+        if marker in warned:
+            continue
+        warned.add(marker)
+        logger.warning(
+            "xdist:explicit_port  worker=%s  %s=%r. If this value is identical across workers, "
+            "parallel sessions may collide. Prefer automatic worker isolation or worker-specific "
+            "values.",
+            worker_id,
+            key,
+            capabilities.get(key),
+        )
+
+
+def _new_flake_analytics() -> dict[str, Any]:
+    return {
+        "tests": {},
+        "retries_executed_total": 0,
+        "flaky_tests": [],
+        "final_failed_after_retries": [],
+        "failure_signatures": {},
+        "failing_locators": {},
+    }
+
+
+def _extract_locator_signature(payload: str) -> str | None:
+    tuple_match = re.search(r"\('([^']+)',\s*'([^']+)'\)", payload)
+    if tuple_match:
+        return f"{tuple_match.group(1)}={tuple_match.group(2)}"
+    bracket_match = re.search(r"\[([A-Za-z0-9_:\-]+)='([^']+)'\]", payload)
+    if bracket_match:
+        return f"{bracket_match.group(1)}={bracket_match.group(2)}"
+    return None
+
+
+def _failure_signature(report: pytest.TestReport) -> str:
+    raw_text = getattr(report, "longreprtext", "") or str(getattr(report, "longrepr", ""))
+    lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+    if not lines:
+        return f"{report.nodeid}::failed"
+    return lines[-1][:240]
+
+
+def _increment_counter(counter: dict[str, int], key: str) -> None:
+    counter[key] = counter.get(key, 0) + 1
+
+
+def _record_flake_failure(item: pytest.Item, report: pytest.TestReport) -> None:
+    analytics = item.config.stash.get(FLAKE_ANALYTICS_KEY, None)
+    if not analytics:
+        return
+
+    fail_counts: dict[str, int] = item.config.stash.get(RETRY_FAIL_COUNT_KEY, {})
+    failures = fail_counts.get(item.nodeid, 0)
+    row = analytics["tests"].setdefault(
+        item.nodeid,
+        {"failures": 0, "max_retries": 0, "final_outcome": "failed"},
+    )
+    row["failures"] = failures
+    row["max_retries"] = _get_max_retries(item)
+    row["final_outcome"] = "failed"
+
+    signature = _failure_signature(report)
+    _increment_counter(analytics["failure_signatures"], signature)
+    locator = _extract_locator_signature(getattr(report, "longreprtext", "") or signature)
+    if locator is not None:
+        _increment_counter(analytics["failing_locators"], locator)
+
+
+def _record_flake_pass(item: pytest.Item) -> None:
+    analytics = item.config.stash.get(FLAKE_ANALYTICS_KEY, None)
+    if not analytics:
+        return
+
+    fail_counts: dict[str, int] = item.config.stash.get(RETRY_FAIL_COUNT_KEY, {})
+    failures = fail_counts.get(item.nodeid, 0)
+    if failures <= 0:
+        return
+
+    row = analytics["tests"].setdefault(
+        item.nodeid,
+        {"failures": failures, "max_retries": _get_max_retries(item), "final_outcome": "passed"},
+    )
+    row["failures"] = failures
+    row["max_retries"] = _get_max_retries(item)
+    row["final_outcome"] = "passed_after_retry"
+
+    if item.nodeid not in analytics["flaky_tests"]:
+        analytics["flaky_tests"].append(item.nodeid)
+
+
+def _mark_flake_final_failure(item: pytest.Item) -> None:
+    analytics = item.config.stash.get(FLAKE_ANALYTICS_KEY, None)
+    if not analytics:
+        return
+
+    fail_counts: dict[str, int] = item.config.stash.get(RETRY_FAIL_COUNT_KEY, {})
+    failures = fail_counts.get(item.nodeid, 0)
+    if failures <= 0:
+        return
+
+    row = analytics["tests"].setdefault(
+        item.nodeid,
+        {"failures": failures, "max_retries": _get_max_retries(item), "final_outcome": "failed"},
+    )
+    row["failures"] = failures
+    row["max_retries"] = _get_max_retries(item)
+    row["final_outcome"] = "failed_after_retries"
+    if item.nodeid not in analytics["final_failed_after_retries"]:
+        analytics["final_failed_after_retries"].append(item.nodeid)
+
+
+def _prepare_flake_payload(analytics: dict[str, Any]) -> dict[str, Any]:
+    tests_with_retries = []
+    for nodeid, row in sorted(analytics.get("tests", {}).items()):
+        failures = int(row.get("failures", 0))
+        max_retries = int(row.get("max_retries", 0))
+        retries_executed = min(failures, max_retries)
+        if failures > 0 or retries_executed > 0:
+            tests_with_retries.append(
+                {
+                    "nodeid": nodeid,
+                    "failures": failures,
+                    "max_retries": max_retries,
+                    "retries_executed": retries_executed,
+                    "final_outcome": str(row.get("final_outcome", "unknown")),
+                }
+            )
+
+    failure_signatures = Counter(analytics.get("failure_signatures", {}))
+    failing_locators = Counter(analytics.get("failing_locators", {}))
+
+    return {
+        "summary": {
+            "tests_with_retries": len(tests_with_retries),
+            "flaky_tests": len(analytics.get("flaky_tests", [])),
+            "final_failed_after_retries": len(analytics.get("final_failed_after_retries", [])),
+            "retries_executed_total": int(analytics.get("retries_executed_total", 0)),
+        },
+        "tests": tests_with_retries,
+        "flaky_tests": sorted(analytics.get("flaky_tests", [])),
+        "final_failed_after_retries": sorted(analytics.get("final_failed_after_retries", [])),
+        "top_failure_signatures": [
+            {"signature": signature, "count": count}
+            for signature, count in failure_signatures.most_common(10)
+        ],
+        "top_failing_locators": [
+            {"locator": locator, "count": count}
+            for locator, count in failing_locators.most_common(10)
+        ],
+    }
+
+
+def _write_flake_report(report_dir: Path, analytics: dict[str, Any]) -> Path:
+    report_dir.mkdir(parents=True, exist_ok=True)
+    payload = _prepare_flake_payload(analytics)
+    output_path = report_dir / "flake-summary.json"
+    output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return output_path
+
+
+def _load_json_mapping(path: Path) -> dict[str, Any] | None:
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return raw if isinstance(raw, dict) else None
+
+
+def _summary_int(summary: dict[str, Any], key: str) -> int:
+    value = summary.get(key, 0)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _write_flake_trend_report(
+    report_dir: Path,
+    run_payload: dict[str, Any],
+    *,
+    history_limit: int = 30,
+) -> Path:
+    """Persist rolling flake trend analytics from per-run flake summary payload."""
+
+    report_dir.mkdir(parents=True, exist_ok=True)
+    trend_path = report_dir / "flake-trend.json"
+
+    history: list[dict[str, Any]] = []
+    existing = _load_json_mapping(trend_path)
+    if existing is not None:
+        raw_history = existing.get("history", [])
+        if isinstance(raw_history, list):
+            history = [entry for entry in raw_history if isinstance(entry, dict)]
+
+    summary = run_payload.get("summary", {})
+    if not isinstance(summary, dict):
+        summary = {}
+
+    run_summary = {
+        "tests_with_retries": _summary_int(summary, "tests_with_retries"),
+        "flaky_tests": _summary_int(summary, "flaky_tests"),
+        "final_failed_after_retries": _summary_int(summary, "final_failed_after_retries"),
+        "retries_executed_total": _summary_int(summary, "retries_executed_total"),
+    }
+
+    run_entry = {
+        "timestamp_utc": (
+            datetime.now(tz=UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        ),
+        "summary": run_summary,
+        "top_failure_signatures": [
+            row
+            for row in run_payload.get("top_failure_signatures", [])
+            if isinstance(row, dict)
+        ][:5],
+        "top_failing_locators": [
+            row
+            for row in run_payload.get("top_failing_locators", [])
+            if isinstance(row, dict)
+        ][:5],
+    }
+    history.append(run_entry)
+    history = history[-max(1, history_limit):]
+
+    latest_summary = history[-1]["summary"]
+    previous_summary = history[-2]["summary"] if len(history) > 1 else None
+
+    tracked_fields = [
+        "tests_with_retries",
+        "flaky_tests",
+        "final_failed_after_retries",
+        "retries_executed_total",
+    ]
+    delta_from_previous = {
+        key: (
+            int(latest_summary.get(key, 0)) - int(previous_summary.get(key, 0))
+            if previous_summary is not None
+            else None
+        )
+        for key in tracked_fields
+    }
+
+    payload = {
+        "trend": {
+            "runs_tracked": len(history),
+            "latest_summary": latest_summary,
+            "previous_summary": previous_summary,
+            "delta_from_previous": delta_from_previous,
+        },
+        "history": history,
+    }
+    trend_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return trend_path
+
+
+def _merge_xdist_flake_reports(report_dir: Path) -> Path | None:
+    """Merge worker flake-summary files into one flake-summary.json on controller."""
+
+    workers_root = report_dir / "workers"
+    if not workers_root.exists():
+        return None
+
+    merged_analytics = _new_flake_analytics()
+    merged_tests: dict[str, dict[str, Any]] = merged_analytics["tests"]
+    flaky_tests: set[str] = set()
+    final_failed: set[str] = set()
+    signature_counts: Counter[str] = Counter()
+    locator_counts: Counter[str] = Counter()
+    retries_total = 0
+
+    for flake_file in sorted(workers_root.glob("*/flake-summary.json")):
+        try:
+            payload = json.loads(flake_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+
+        retries_total += int(payload.get("summary", {}).get("retries_executed_total", 0))
+        for entry in payload.get("tests", []):
+            if not isinstance(entry, dict):
+                continue
+            nodeid = str(entry.get("nodeid", "")).strip()
+            if not nodeid:
+                continue
+            current = merged_tests.get(nodeid)
+            candidate = {
+                "failures": int(entry.get("failures", 0)),
+                "max_retries": int(entry.get("max_retries", 0)),
+                "final_outcome": str(entry.get("final_outcome", "unknown")),
+            }
+            if current is None or candidate["failures"] >= int(current.get("failures", 0)):
+                merged_tests[nodeid] = candidate
+
+        flaky_tests.update(str(item) for item in payload.get("flaky_tests", []))
+        final_failed.update(str(item) for item in payload.get("final_failed_after_retries", []))
+        signature_counts.update(
+            {
+                str(entry.get("signature", "")): int(entry.get("count", 0))
+                for entry in payload.get("top_failure_signatures", [])
+                if isinstance(entry, dict) and str(entry.get("signature", "")).strip()
+            }
+        )
+        locator_counts.update(
+            {
+                str(entry.get("locator", "")): int(entry.get("count", 0))
+                for entry in payload.get("top_failing_locators", [])
+                if isinstance(entry, dict) and str(entry.get("locator", "")).strip()
+            }
+        )
+
+    merged_analytics["retries_executed_total"] = retries_total
+    merged_analytics["flaky_tests"] = sorted(flaky_tests)
+    merged_analytics["final_failed_after_retries"] = sorted(final_failed)
+    merged_analytics["failure_signatures"] = dict(signature_counts)
+    merged_analytics["failing_locators"] = dict(locator_counts)
+
+    return _write_flake_report(report_dir, merged_analytics)
 
 
 def _merge_xdist_worker_reports(report_dir: Path) -> Path | None:
@@ -402,6 +750,8 @@ def pytest_configure(config: Config) -> None:
     config.stash[RETRY_DRIVER_REGISTRY_KEY] = {}
     config.stash[RETRY_RECORDER_REGISTRY_KEY] = {}
     config.stash[RETRY_FAIL_COUNT_KEY] = {}
+    config.stash[FLAKE_ANALYTICS_KEY] = _new_flake_analytics()
+    config.stash[XDIST_WARNED_COLLISION_KEYS] = set()
 
     if settings.reporting_enabled:
         if _is_xdist_controller(config):
@@ -527,6 +877,7 @@ def _build_final_config(
         if extension_caps:
             capabilities.update(dict(extension_caps))
 
+    _warn_xdist_port_collisions(capabilities, settings, request.config)
     _apply_xdist_worker_isolation(capabilities, settings, request.config)
 
     try:
@@ -706,7 +1057,16 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]):
         if max_retries > 0:
             fail_counts: dict[str, int] = item.config.stash[RETRY_FAIL_COUNT_KEY]
             fail_counts[item.nodeid] = fail_counts.get(item.nodeid, 0) + 1
+
+        _record_flake_failure(item, report)
+
+        if max_retries > 0:
+            fail_counts = item.config.stash[RETRY_FAIL_COUNT_KEY]
             if fail_counts[item.nodeid] <= max_retries:
+                analytics = item.config.stash.get(FLAKE_ANALYTICS_KEY, {})
+                analytics["retries_executed_total"] = int(
+                    analytics.get("retries_executed_total", 0)
+                ) + 1
                 item.stash[KEEP_DRIVER_ALIVE_KEY] = True
                 final_failure = False
                 logger.info(
@@ -720,6 +1080,8 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]):
             item.session.shouldstop = (
                 f"--app-fail-fast: {item.nodeid} failed after all retry attempts"
             )
+        if final_failure:
+            _mark_flake_final_failure(item)
 
     # Failure artifact capture (screenshot + page source) on call phase.
     # Only capture on the FINAL failure (not mid-retry), so artifacts reflect
@@ -762,6 +1124,7 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]):
                 recorder.stop_and_save(active_driver, item.nodeid, artifacts_dir, settings)
 
     elif report.when == "call" and not report.failed:
+        _record_flake_pass(item)
         # Test passed (possibly after retries) — this is always the final outcome.
         active_driver = item.stash.get(DRIVER_KEY, None)
         settings = item.config.stash.get(SETTINGS_KEY, None)
@@ -781,10 +1144,28 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     if _is_xdist_controller(session.config):
         if settings is not None and settings.reporting_enabled:
             _merge_xdist_worker_reports(settings.report_dir)
+            merged_flake_path = _merge_xdist_flake_reports(settings.report_dir)
+            if merged_flake_path is not None:
+                merged_payload = _load_json_mapping(merged_flake_path)
+                if merged_payload is not None:
+                    _write_flake_trend_report(settings.report_dir, merged_payload)
     else:
         reporter = session.config.stash.get(REPORTER_KEY, None)
         if reporter is not None:
             reporter.flush()
+        if settings is not None and settings.reporting_enabled:
+            analytics = session.config.stash.get(FLAKE_ANALYTICS_KEY, _new_flake_analytics())
+            worker_id = _xdist_worker_id(session.config)
+            report_dir = (
+                settings.report_dir / "workers" / worker_id
+                if worker_id is not None
+                else settings.report_dir
+            )
+            flake_path = _write_flake_report(report_dir, analytics)
+            if worker_id is None:
+                payload = _load_json_mapping(flake_path)
+                if payload is not None:
+                    _write_flake_trend_report(settings.report_dir, payload)
 
     registry: dict[str, Any] = session.config.stash.get(RETRY_DRIVER_REGISTRY_KEY, {})
     for drv in list(registry.values()):

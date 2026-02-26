@@ -100,6 +100,10 @@ if you did not set them explicitly:
 If `APP_MANAGE_APPIUM_SERVER=true`, each worker also starts Appium on
 `APP_APPIUM_PORT + worker_index`.
 
+If you set `systemPort` / `wdaLocalPort` / `webkitDebugProxyPort` explicitly
+while using xdist, the kit logs a warning because static values can collide
+across workers.
+
 ### Artifacts and reporting
 
 | `.env` key | Python field | Type | Default | Description |
