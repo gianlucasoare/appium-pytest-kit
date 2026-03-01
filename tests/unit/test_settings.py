@@ -146,3 +146,36 @@ def test_strict_mode_rejects_unknown_app_env_key_from_process_env(monkeypatch) -
     monkeypatch.setenv("APP_APP_ACTIVITTY", ".MainActivity")
     with pytest.raises(ValueError, match="APP_APP_ACTIVITTY"):
         load_settings(env_file=Path("/tmp/does-not-need-to-exist.env"))
+
+
+def test_artifact_redaction_patterns_accept_comma_separated_string() -> None:
+    settings = AppiumPytestKitSettings(
+        artifact_redaction_patterns="token=(\\w+),email=([^\\s]+)"
+    )
+    assert settings.artifact_redaction_patterns == ("token=(\\w+)", "email=([^\\s]+)")
+
+
+def test_cli_overrides_support_quarantine_mode() -> None:
+    base = AppiumPytestKitSettings()
+    merged = apply_cli_overrides(base, {"app_quarantine_mode": "skip"})
+    assert merged.quarantine_mode == "skip"
+
+
+def test_cli_overrides_support_perf_enabled_and_budgets() -> None:
+    base = AppiumPytestKitSettings()
+    merged = apply_cli_overrides(
+        base,
+        {
+            "app_perf_enabled": "true",
+            "app_perf_budget_action_ms": "750",
+            "app_perf_budget_test_ms": "5000",
+        },
+    )
+    assert merged.perf_enabled is True
+    assert merged.perf_budget_action_ms == 750
+    assert merged.perf_budget_test_ms == 5000
+
+
+def test_perf_budget_rejects_non_positive_values() -> None:
+    with pytest.raises(ValueError, match="must be > 0"):
+        AppiumPytestKitSettings(perf_budget_action_ms=0)

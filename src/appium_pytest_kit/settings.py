@@ -235,11 +235,21 @@ class AppiumPytestKitSettings(BaseSettings):
     video_policy: Literal["always", "failed", "never"] = "never"
     artifacts_dir: Path = Path("artifacts")
     clean_artifacts_on_start: bool = False
+    artifact_redaction_enabled: bool = False
+    artifact_redact_screenshots: bool = False
+    artifact_redaction_replacement: str = "[REDACTED]"
+    artifact_redaction_patterns: tuple[str, ...] = ()
     appium_preflight_status: bool = True
     strict_config: bool = False
 
     reporting_enabled: bool = False
     report_dir: Path = Path("artifacts/appium-pytest-kit")
+    quarantine_mode: Literal["run", "skip"] = "run"
+    perf_enabled: bool = False
+    perf_budget_action_ms: float | None = None
+    perf_budget_test_ms: float | None = None
+    perf_budget_session_start_ms: float | None = None
+    perf_trend_history_limit: int = 30
 
     @field_validator("platform")
     @classmethod
@@ -301,6 +311,40 @@ class AppiumPytestKitSettings(BaseSettings):
             return dict(value)
         msg = "capabilities_json must be a JSON object string or mapping"
         raise TypeError(msg)
+
+    @field_validator("artifact_redaction_patterns", mode="before")
+    @classmethod
+    def _parse_artifact_redaction_patterns(cls, value: Any) -> tuple[str, ...]:
+        if value is None or value == "":
+            return ()
+        if isinstance(value, str):
+            return tuple(part.strip() for part in value.split(",") if part.strip())
+        if isinstance(value, (list, tuple)):
+            return tuple(str(item).strip() for item in value if str(item).strip())
+        msg = "artifact_redaction_patterns must be a comma-separated string or a sequence"
+        raise TypeError(msg)
+
+    @field_validator(
+        "perf_budget_action_ms",
+        "perf_budget_test_ms",
+        "perf_budget_session_start_ms",
+    )
+    @classmethod
+    def _validate_optional_positive_ms(cls, value: float | None) -> float | None:
+        if value is None:
+            return None
+        if value <= 0:
+            msg = "performance budget values must be > 0 milliseconds"
+            raise ValueError(msg)
+        return value
+
+    @field_validator("perf_trend_history_limit")
+    @classmethod
+    def _validate_perf_trend_history_limit(cls, value: int) -> int:
+        if value < 1:
+            msg = "perf_trend_history_limit must be >= 1"
+            raise ValueError(msg)
+        return value
 
     @model_validator(mode="after")
     def _validate_strict_capabilities(self) -> "AppiumPytestKitSettings":

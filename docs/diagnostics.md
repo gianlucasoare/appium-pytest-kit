@@ -48,6 +48,26 @@ Device log capture is best-effort and depends on platform tools:
 - iOS Simulator: `xcrun simctl spawn <udid|booted> log show --last 15m`
 - iOS real device: tries `xcrun devicectl ...` / `idevicesyslog` when available
 
+### Artifact redaction
+
+You can redact sensitive values from text artifacts (page source, device logs,
+session logs):
+
+```env
+APP_ARTIFACT_REDACTION_ENABLED=true
+APP_ARTIFACT_REDACTION_REPLACEMENT=[MASKED]
+APP_ARTIFACT_REDACTION_PATTERNS=email=([^\s]+),session=([A-Za-z0-9]+)
+```
+
+Optional strict screenshot privacy mode:
+
+```env
+APP_ARTIFACT_REDACT_SCREENSHOTS=true
+```
+
+When enabled, screenshots are replaced with a placeholder image instead of raw
+pixels from the app UI.
+
 ---
 
 ## Video recording
@@ -148,6 +168,23 @@ With `pytest-xdist`, each worker writes its own intermediate summary and the
 controller merges them into a single final `summary.json`.
 The same merge is applied for `flake-summary.json`, and the controller updates
 `flake-trend.json` from the merged flake summary.
+
+To enforce flake quality gates in CI, run:
+
+```bash
+python scripts/check_flake_thresholds.py \
+  --summary artifacts/appium-pytest-kit/flake-summary.json \
+  --trend artifacts/appium-pytest-kit/flake-trend.json \
+  --max-flaky-tests 0 \
+  --max-final-failed-after-retries 0
+```
+
+If performance telemetry is enabled (`APP_PERF_ENABLED=true`), the same report
+directory also includes:
+- `perf-summary.json`
+- `perf-trend.json`
+
+See [Performance checks](performance.md) for details.
 
 Only the `call` phase is recorded (setup/teardown failures are tracked by pytest separately).
 

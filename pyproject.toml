@@ -79,6 +79,7 @@ addopts = "-ra --strict-config --strict-markers"
 testpaths = ["tests/unit"]
 markers = [
   "integration: requires running Appium server and a device/emulator",
+  "quarantine: isolated flaky test lane (excluded from default CI lanes)",
 ]
 
 [tool.ruff]

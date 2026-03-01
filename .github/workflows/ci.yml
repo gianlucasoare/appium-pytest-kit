@@ -5,7 +5,38 @@ on:
   pull_request:
 
 jobs:
+  conventional-commits:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate commit subjects (push)
+        if: github.event_name == 'push'
+        run: |
+          BEFORE="${{ github.event.before }}"
+          if [ "${BEFORE}" = "0000000000000000000000000000000000000000" ]; then
+            RANGE="HEAD~1..HEAD"
+          else
+            RANGE="${BEFORE}..${{ github.sha }}"
+          fi
+          python scripts/check_conventional_commits.py --range "${RANGE}"
+
+      - name: Validate commit subjects (pull request)
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=200 origin "${{ github.base_ref }}"
+          python scripts/check_conventional_commits.py --range "origin/${{ github.base_ref }}..HEAD"
+
   test:
+    needs: conventional-commits
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -29,7 +60,21 @@ jobs:
         run: ruff check .
 
       - name: Unit tests
-        run: pytest -q
+        env:
+          APP_REPORTING_ENABLED: "true"
+          APP_REPORT_DIR: artifacts/appium-pytest-kit
+        run: pytest -q -m "not quarantine"
+
+      - name: Flake quality gate
+        if: matrix.python-version == '3.12'
+        run: |
+          python scripts/check_flake_thresholds.py \
+            --summary artifacts/appium-pytest-kit/flake-summary.json \
+            --trend artifacts/appium-pytest-kit/flake-trend.json \
+            --max-flaky-tests 0 \
+            --max-final-failed-after-retries 0 \
+            --max-tests-with-retries 0 \
+            --max-retries-executed-total 0
 
       - name: Example collection check
         run: pytest --collect-only examples/basic/tests -q
@@ -61,6 +106,7 @@ jobs:
         run: python -c "import appium_pytest_kit as kit; print(kit.__version__)"
 
   xdist:
+    needs: conventional-commits
     runs-on: ubuntu-latest
 
     steps:
@@ -78,4 +124,53 @@ jobs:
           pip install -e ".[dev,xdist,retry]"
 
       - name: Unit tests (xdist)
-        run: pytest -q -n 2
+        env:
+          APP_REPORTING_ENABLED: "true"
+          APP_REPORT_DIR: artifacts/appium-pytest-kit
+        run: pytest -q -n 2 -m "not quarantine"
+
+      - name: Flake quality gate (xdist)
+        run: |
+          python scripts/check_flake_thresholds.py \
+            --summary artifacts/appium-pytest-kit/flake-summary.json \
+            --trend artifacts/appium-pytest-kit/flake-trend.json \
+            --max-flaky-tests 0 \
+            --max-final-failed-after-retries 0 \
+            --max-tests-with-retries 0 \
+            --max-retries-executed-total 0
+
+  quarantine:
+    needs: conventional-commits
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run quarantined tests (tracked, non-blocking)
+        run: |
+          set +e
+          pytest -q -m quarantine --junitxml=artifacts/quarantine/junit.xml
+          status=$?
+          set -e
+          if [ "${status}" -ne 0 ] && [ "${status}" -ne 5 ]; then
+            exit "${status}"
+          fi
+
+      - name: Upload quarantine report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quarantine-report
+          path: artifacts/quarantine

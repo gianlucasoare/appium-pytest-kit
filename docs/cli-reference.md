@@ -273,6 +273,14 @@ pytest --app-artifacts-dir test-output/artifacts
 # Optional: wipe old artifacts before test session starts
 pytest --app-clean-artifacts-on-start
 pytest --no-app-clean-artifacts-on-start
+
+# Optional: redact sensitive text in page source / log artifacts
+pytest --app-artifact-redaction-enabled
+pytest --app-artifact-redaction-replacement "[MASKED]"
+pytest --app-artifact-redaction-patterns "email=([^\\s]+),session=([A-Za-z0-9]+)"
+
+# Optional: strict privacy mode for screenshots
+pytest --app-artifact-redact-screenshots
 ```
 
 | Flag | Default | Description |
@@ -280,6 +288,12 @@ pytest --no-app-clean-artifacts-on-start
 | `--app-artifacts-dir PATH` | `artifacts` | Root directory for screenshots, videos, and page sources |
 | `--app-clean-artifacts-on-start` | `false` | Remove existing artifact files before the run |
 | `--no-app-clean-artifacts-on-start` | `false` | Keep existing artifact files |
+| `--app-artifact-redaction-enabled` | `false` | Enable text-artifact redaction for page source and logs |
+| `--no-app-artifact-redaction-enabled` | `false` | Disable text-artifact redaction |
+| `--app-artifact-redact-screenshots` | `false` | Replace screenshots with a redacted placeholder image |
+| `--no-app-artifact-redact-screenshots` | `false` | Keep screenshots unchanged |
+| `--app-artifact-redaction-replacement TEXT` | `[REDACTED]` | Replacement token used for redacted values |
+| `--app-artifact-redaction-patterns CSV` | `""` | Extra comma-separated regex patterns for redaction |
 
 ---
 
@@ -297,6 +311,33 @@ pytest --no-app-reporting-enabled
 |---|---|
 | `--app-reporting-enabled` | Write a JSON test summary at the end of the session |
 | `--no-app-reporting-enabled` | Do not write a JSON summary |
+| `--app-quarantine-mode run\|skip` | Skip `@pytest.mark.quarantine` tests when set to `skip` |
+
+---
+
+### Performance checks
+
+```bash
+# Enable performance telemetry output (perf-summary/perf-trend)
+pytest --app-perf-enabled --app-reporting-enabled
+
+# Optional soft budget warnings
+pytest --app-perf-budget-action-ms 800
+pytest --app-perf-budget-test-ms 15000
+pytest --app-perf-budget-session-start-ms 6000
+
+# Control trend history size
+pytest --app-perf-trend-history-limit 50
+```
+
+| Flag | Description |
+|---|---|
+| `--app-perf-enabled` | Enable performance telemetry collection |
+| `--no-app-perf-enabled` | Disable performance telemetry collection |
+| `--app-perf-budget-action-ms MS` | Warn when single action latency exceeds threshold |
+| `--app-perf-budget-test-ms MS` | Warn when test call duration exceeds threshold |
+| `--app-perf-budget-session-start-ms MS` | Warn when driver/session startup exceeds threshold |
+| `--app-perf-trend-history-limit N` | Keep last `N` runs in `perf-trend.json` |
 
 ---
 

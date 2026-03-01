@@ -17,13 +17,18 @@ appium-pytest-kit-init --framework --root my-project
 |---|---|
 | **Zero-config fixtures** | `driver`, `waiter`, `actions`, `page_factory` — just add to your test function |
 | **Auto failure artifacts** | Screenshot + page source + device logs + session log captured automatically on failure |
+| **Artifact redaction** | Optional redaction for text artifacts + optional screenshot placeholder mode |
 | **3-tier device resolution** | explicit settings → named profile → auto-detect via adb/xcrun |
 | **Session modes** | `clean` (per-test) · `clean-session` (shared) · `debug` (keep alive) |
 | **Retry support** | Session reused across retry attempts — no restart cost between tries |
+| **Flake quality gates** | `scripts/check_flake_thresholds.py` can fail CI when flake budgets are exceeded |
+| **Performance checks** | Optional perf telemetry (`perf-summary.json` / `perf-trend.json`) + soft budgets |
 | **xdist parallelism** | Worker-safe capability port isolation + per-worker managed Appium ports |
+| **Quarantine lane** | `@pytest.mark.quarantine` tests can be isolated from default lanes |
 | **Fail-fast** | `--app-fail-fast` stops the suite after retries are exhausted, not before |
 | **Explicit waits** | `WaitTimeoutError` with structured `.locator` and `.timeout` context |
 | **High-level actions** | tap, type, swipe, scroll, assertions — all wait-safe |
+| **App reset primitives** | clear app data, reset permissions, reinstall app helpers in `actions` |
 | **Page + flow objects** | Scaffold generates `pages/` and `flows/` with base classes ready to extend |
 | **Extension hooks** | Override settings, inject capabilities, run code after driver creation |
 | **CLI scaffold** | One command to generate a full project structure |
@@ -98,9 +103,13 @@ The repository includes a GitHub Actions release workflow with Trusted Publishin
 - trigger: push a tag like `v0.1.8`
 - behavior: run tests, build `sdist` + wheel, verify tag/version match, publish to PyPI via OIDC
 - publish guard: `publish` job runs only for `refs/tags/v*`
+- optional signed-tag enforcement via `REQUIRE_SIGNED_TAG=true` repo variable
+- auto-generated GitHub release notes after publish
 
 Changelog automation is also available via `.github/workflows/changelog.yml`
 (`workflow_dispatch`) to generate a release section in `CHANGELOG.md` and open a PR.
+CI in `.github/workflows/ci.yml` also validates conventional commit subjects and
+runs a dedicated quarantined-test lane (`@pytest.mark.quarantine`).
 
 ---
 
@@ -418,6 +427,9 @@ actions.press_keycode(66)  # ENTER
 actions.activate_app("com.example.myapp")
 actions.terminate_app("com.example.myapp")
 actions.background_app(2)
+actions.clear_app_data("com.example.myapp")        # Android only
+actions.reset_app_permissions()                     # Android only
+actions.reinstall_app(app_path="/tmp/build.apk")
 actions.open_deep_link("myapp://profile", app_id="com.example.myapp")
 
 # Hybrid
@@ -523,5 +535,6 @@ python -m pytest --collect-only examples/basic/tests -q
 | Session modes | [docs/session-modes.md](docs/session-modes.md) |
 | Device resolution | [docs/device-resolution.md](docs/device-resolution.md) |
 | Failure diagnostics + video | [docs/diagnostics.md](docs/diagnostics.md) |
+| Performance checks | [docs/performance.md](docs/performance.md) |
 | Error reference | [docs/errors.md](docs/errors.md) |
 | Troubleshooting | [docs/troubleshooting.md](docs/troubleshooting.md) |

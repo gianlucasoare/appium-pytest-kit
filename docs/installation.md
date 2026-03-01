@@ -154,6 +154,10 @@ verify `vX.Y.Z` matches `project.version`, and publish automatically.
 The `publish` job is tag-guarded, so manual workflow runs from branches do not
 upload to PyPI.
 
+`release.yml` also creates GitHub Release notes automatically for the tag.
+You can optionally require signed tags by setting repository variable
+`REQUIRE_SIGNED_TAG=true`.
+
 For release notes, run `.github/workflows/changelog.yml` (manual dispatch) to
 generate a `CHANGELOG.md` section and open a PR.
 

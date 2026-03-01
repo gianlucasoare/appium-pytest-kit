@@ -1,11 +1,23 @@
 """Failure artifact capture helpers (screenshot + page source)."""
 
 
+import base64
 import re
 import subprocess
 import warnings
 from pathlib import Path
 from typing import Any
+
+_TRANSPARENT_PIXEL_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/xFoAAAAASUVORK5CYII="
+)
+_DEFAULT_REDACTION_PATTERNS: tuple[str, ...] = (
+    r"(?i)(authorization\s*:\s*bearer\s+)([A-Za-z0-9\-._~+/]+=*)",
+    r"(?i)(access[_-]?token[\s\"'=:\[]+)([A-Za-z0-9\-._~+/]+=*)",
+    r"(?i)(refresh[_-]?token[\s\"'=:\[]+)([A-Za-z0-9\-._~+/]+=*)",
+    r"(?i)(api[_-]?key[\s\"'=:\[]+)([A-Za-z0-9\-._~+/]+=*)",
+    r"(?i)(password[\s\"'=:\[]+)([^\\s\"']+)",
+)
 
 
 def _safe_filename(node_id: str) -> str:
@@ -13,12 +25,48 @@ def _safe_filename(node_id: str) -> str:
     return re.sub(r"[^\w\-]", "_", node_id.replace("::", "__").replace("/", "_"))
 
 
-def capture_screenshot(driver, node_id: str, artifacts_dir: Path) -> Path | None:
+def _redact_text(
+    payload: str,
+    *,
+    enabled: bool,
+    replacement: str = "[REDACTED]",
+    extra_patterns: tuple[str, ...] = (),
+) -> str:
+    if not enabled:
+        return payload
+
+    redacted = payload
+    for pattern in (*_DEFAULT_REDACTION_PATTERNS, *tuple(extra_patterns)):
+        try:
+            compiled = re.compile(pattern)
+        except re.error:
+            continue
+
+        def _replace(match: re.Match[str]) -> str:
+            if match.lastindex and match.lastindex >= 2:
+                return f"{match.group(1)}{replacement}"
+            return replacement
+
+        redacted = compiled.sub(_replace, redacted)
+    return redacted
+
+
+def capture_screenshot(
+    driver,
+    node_id: str,
+    artifacts_dir: Path,
+    *,
+    redact: bool = False,
+    redact_screenshot: bool = False,
+) -> Path | None:
     """Save a PNG screenshot and return the path, or None on failure."""
 
     try:
         dest = artifacts_dir / "screenshots" / f"{_safe_filename(node_id)}.png"
         dest.parent.mkdir(parents=True, exist_ok=True)
+        if redact and redact_screenshot:
+            dest.write_bytes(_TRANSPARENT_PIXEL_PNG)
+            return dest
         driver.save_screenshot(str(dest))
         return dest
     except Exception as exc:
@@ -29,13 +77,28 @@ def capture_screenshot(driver, node_id: str, artifacts_dir: Path) -> Path | None
         return None
 
 
-def capture_page_source(driver, node_id: str, artifacts_dir: Path) -> Path | None:
+def capture_page_source(
+    driver,
+    node_id: str,
+    artifacts_dir: Path,
+    *,
+    redact: bool = False,
+    redaction_patterns: tuple[str, ...] = (),
+    redaction_replacement: str = "[REDACTED]",
+) -> Path | None:
     """Save page source XML and return the path, or None on failure."""
 
     try:
         dest = artifacts_dir / "pagesource" / f"{_safe_filename(node_id)}.xml"
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(driver.page_source, encoding="utf-8")
+        source = str(driver.page_source)
+        source = _redact_text(
+            source,
+            enabled=redact,
+            replacement=redaction_replacement,
+            extra_patterns=tuple(redaction_patterns),
+        )
+        dest.write_text(source, encoding="utf-8")
         return dest
     except Exception as exc:
         warnings.warn(
@@ -131,6 +194,9 @@ def capture_device_logs(
     platform: str | None = None,
     udid: str | None = None,
     is_simulator: bool = False,
+    redact: bool = False,
+    redaction_patterns: tuple[str, ...] = (),
+    redaction_replacement: str = "[REDACTED]",
 ) -> Path | None:
     """Capture platform logs (adb / iOS) and return saved path, or None."""
 
@@ -148,6 +214,12 @@ def capture_device_logs(
         if not payload:
             return None
 
+        payload = _redact_text(
+            payload,
+            enabled=redact,
+            replacement=redaction_replacement,
+            extra_patterns=tuple(redaction_patterns),
+        )
         dest = artifacts_dir / "device_logs" / f"{_safe_filename(node_id)}.log"
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(payload, encoding="utf-8")
@@ -184,6 +256,10 @@ def capture_session_log(
     driver: Any,
     node_id: str,
     artifacts_dir: Path,
+    *,
+    redact: bool = False,
+    redaction_patterns: tuple[str, ...] = (),
+    redaction_replacement: str = "[REDACTED]",
 ) -> Path | None:
     """Capture Appium session logs via ``driver.get_log`` and return saved path."""
 
@@ -209,6 +285,12 @@ def capture_session_log(
             if not payload:
                 continue
 
+            payload = _redact_text(
+                payload,
+                enabled=redact,
+                replacement=redaction_replacement,
+                extra_patterns=tuple(redaction_patterns),
+            )
             dest = artifacts_dir / "session_logs" / f"{_safe_filename(node_id)}.log"
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_text(payload, encoding="utf-8")

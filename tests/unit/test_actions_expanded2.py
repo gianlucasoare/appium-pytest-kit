@@ -19,6 +19,25 @@ def _make_actions(visible_el=None) -> tuple[MobileActions, MagicMock]:
     return MobileActions(driver=driver, waiter=waiter), driver
 
 
+def test_perf_sink_collects_timing_for_tap() -> None:
+    driver = MagicMock()
+    waiter = MagicMock(spec=Waiter)
+    waiter.for_visibility.return_value = MagicMock()
+    events: list[tuple[str, float, str]] = []
+    actions = MobileActions(
+        driver=driver,
+        waiter=waiter,
+        perf_enabled=True,
+        perf_sink=lambda action, duration_ms, status: events.append((action, duration_ms, status)),
+    )
+
+    actions.tap(("id", "btn"))
+
+    assert events
+    assert events[0][0] == "tap"
+    assert events[0][2] == "ok"
+
+
 def _element_at(x: int, y: int, w: int = 100, h: int = 50) -> MagicMock:
     el = MagicMock()
     el.location = {"x": x, "y": y}
@@ -383,6 +402,58 @@ class TestAppLifecycle:
         with pytest.raises(ActionError) as exc:
             actions.background_app(1)
         assert exc.value.action == "background_app"
+
+    def test_clear_app_data_android_uses_pm_clear(self) -> None:
+        actions, driver = _make_actions()
+        driver.capabilities = {"platformName": "Android", "appPackage": "com.example.app"}
+
+        actions.clear_app_data()
+
+        driver.execute_script.assert_called_once_with(
+            "mobile: shell",
+            {"command": "pm", "args": ["clear", "com.example.app"]},
+        )
+
+    def test_reset_app_permissions_android_uses_pm_reset(self) -> None:
+        actions, driver = _make_actions()
+        driver.capabilities = {"platformName": "Android"}
+
+        actions.reset_app_permissions()
+
+        driver.execute_script.assert_called_once_with(
+            "mobile: shell",
+            {"command": "pm", "args": ["reset-permissions"]},
+        )
+
+    def test_clear_app_data_raises_on_ios(self) -> None:
+        actions, driver = _make_actions()
+        driver.capabilities = {"platformName": "iOS", "bundleId": "com.example.ios"}
+
+        with pytest.raises(ActionError) as exc_info:
+            actions.clear_app_data()
+        assert exc_info.value.action == "clear_app_data"
+
+    def test_reinstall_app_uses_remove_install_activate(self) -> None:
+        actions, driver = _make_actions()
+        driver.capabilities = {
+            "platformName": "android",
+            "appPackage": "com.example.app",
+            "app": "/tmp/build.apk",
+        }
+
+        actions.reinstall_app()
+
+        driver.remove_app.assert_called_once_with("com.example.app")
+        driver.install_app.assert_called_once_with("/tmp/build.apk")
+        driver.activate_app.assert_called_once_with("com.example.app")
+
+    def test_reinstall_app_raises_when_install_path_missing(self) -> None:
+        actions, driver = _make_actions()
+        driver.capabilities = {"platformName": "android", "appPackage": "com.example.app"}
+
+        with pytest.raises(ActionError) as exc_info:
+            actions.reinstall_app()
+        assert exc_info.value.action == "reinstall_app"
 
 
 class TestOpenDeepLink:

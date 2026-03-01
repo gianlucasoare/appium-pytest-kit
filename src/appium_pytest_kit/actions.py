@@ -3,7 +3,8 @@
 
 import logging
 import time
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
+from contextlib import contextmanager
 
 from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.common.action_chains import ActionChains
@@ -20,9 +21,39 @@ logger = logging.getLogger(__name__)
 class MobileActions:
     """Driver action helpers that stay generic and app-independent."""
 
-    def __init__(self, driver, waiter: Waiter) -> None:
+    def __init__(
+        self,
+        driver,
+        waiter: Waiter,
+        *,
+        perf_enabled: bool = False,
+        perf_sink: Callable[[str, float, str], None] | None = None,
+    ) -> None:
         self._driver = driver
         self._waiter = waiter
+        self._perf_enabled = bool(perf_enabled)
+        self._perf_sink = perf_sink
+
+    def _record_perf(self, action_name: str, started_at: float, status: str) -> None:
+        if not self._perf_enabled or self._perf_sink is None:
+            return
+        duration_ms = (time.perf_counter() - started_at) * 1000.0
+        try:
+            self._perf_sink(action_name, duration_ms, status)
+        except Exception:
+            # Perf telemetry must not affect test behavior.
+            logger.debug("perf:record_failed  action=%s", action_name)
+
+    @contextmanager
+    def _measure(self, action_name: str):
+        started_at = time.perf_counter()
+        try:
+            yield
+        except Exception:
+            self._record_perf(action_name, started_at, "error")
+            raise
+        else:
+            self._record_perf(action_name, started_at, "ok")
 
     # ------------------------------------------------------------------
     # Tap / click
@@ -31,25 +62,27 @@ class MobileActions:
     def tap(self, locator: Locator, *, timeout: float = 10.0) -> None:
         """Tap a visible element."""
 
-        logger.debug("tap  %s", locator)
-        try:
-            element = self._waiter.for_visibility(locator, timeout=timeout)
-            element.click()
-        except WebDriverException as exc:
-            raise ActionError(
-                f"Tap failed for locator: {locator}", locator=locator, action="tap"
-            ) from exc
+        with self._measure("tap"):
+            logger.debug("tap  %s", locator)
+            try:
+                element = self._waiter.for_visibility(locator, timeout=timeout)
+                element.click()
+            except WebDriverException as exc:
+                raise ActionError(
+                    f"Tap failed for locator: {locator}", locator=locator, action="tap"
+                ) from exc
 
     def tap_if_present(self, locator: Locator, *, timeout: float = 2.0) -> bool:
         """Tap element if visible within timeout. Returns True if tapped."""
 
-        logger.debug("tap_if_present  %s", locator)
-        try:
-            element = self._waiter.for_visibility(locator, timeout=timeout)
-            element.click()
-            return True
-        except Exception:
-            return False
+        with self._measure("tap_if_present"):
+            logger.debug("tap_if_present  %s", locator)
+            try:
+                element = self._waiter.for_visibility(locator, timeout=timeout)
+                element.click()
+                return True
+            except Exception:
+                return False
 
     def click_by_attribute_value(
         self,
@@ -61,52 +94,53 @@ class MobileActions:
     ) -> bool:
         """Click the first element matching *locator* whose attribute equals *expected*."""
 
-        effective_timeout = timeout if timeout is not None else self._waiter.default_timeout
-        logger.debug(
-            "click_by_attribute_value  locator=%s  attr=%s  expected=%r  timeout=%.1fs",
-            locator,
-            attr,
-            expected,
-            effective_timeout,
-        )
-
-        by, value = locator
-
-        def _find_and_click(driver):
-            try:
-                elements = driver.find_elements(by, value)
-            except Exception:
-                return False
-            for element in elements:
-                try:
-                    actual = element.get_attribute(attr)
-                except Exception:
-                    continue
-                if actual is None or str(actual) != expected:
-                    continue
-                element.click()
-                return True
-            return False
-
-        try:
-            self._waiter.until(
-                _find_and_click,
-                timeout=effective_timeout,
-                message=(
-                    f"No element matching {locator} had attribute {attr!r} == {expected!r}"
-                ),
-                locator=locator,
+        with self._measure("click_by_attribute_value"):
+            effective_timeout = timeout if timeout is not None else self._waiter.default_timeout
+            logger.debug(
+                "click_by_attribute_value  locator=%s  attr=%s  expected=%r  timeout=%.1fs",
+                locator,
+                attr,
+                expected,
+                effective_timeout,
             )
-            return True
-        except WebDriverException as exc:
-            raise ActionError(
-                (
-                    f"click_by_attribute_value failed for locator={locator}, "
-                    f"attribute={attr!r}, expected={expected!r}"
-                ),
-                locator=locator,
-                action="click_by_attribute_value",
-            ) from exc
+
+            by, value = locator
+
+            def _find_and_click(driver):
+                try:
+                    elements = driver.find_elements(by, value)
+                except Exception:
+                    return False
+                for element in elements:
+                    try:
+                        actual = element.get_attribute(attr)
+                    except Exception:
+                        continue
+                    if actual is None or str(actual) != expected:
+                        continue
+                    element.click()
+                    return True
+                return False
+
+            try:
+                self._waiter.until(
+                    _find_and_click,
+                    timeout=effective_timeout,
+                    message=(
+                        f"No element matching {locator} had attribute {attr!r} == {expected!r}"
+                    ),
+                    locator=locator,
+                )
+                return True
+            except WebDriverException as exc:
+                raise ActionError(
+                    (
+                        f"click_by_attribute_value failed for locator={locator}, "
+                        f"attribute={attr!r}, expected={expected!r}"
+                    ),
+                    locator=locator,
+                    action="click_by_attribute_value",
+                ) from exc
 
     def tap_if_present_first_available(
         self,
@@ -267,16 +301,17 @@ class MobileActions:
     ) -> None:
         """Type text into a visible element."""
 
-        logger.debug("type_text  %s  value=%r  clear_first=%s", locator, value, clear_first)
-        try:
-            element = self._waiter.for_visibility(locator, timeout=timeout)
-            if clear_first:
-                element.clear()
-            element.send_keys(value)
-        except WebDriverException as exc:
-            raise ActionError(
-                f"Type failed for locator: {locator}", locator=locator, action="type_text"
-            ) from exc
+        with self._measure("type_text"):
+            logger.debug("type_text  %s  value=%r  clear_first=%s", locator, value, clear_first)
+            try:
+                element = self._waiter.for_visibility(locator, timeout=timeout)
+                if clear_first:
+                    element.clear()
+                element.send_keys(value)
+            except WebDriverException as exc:
+                raise ActionError(
+                    f"Type failed for locator: {locator}", locator=locator, action="type_text"
+                ) from exc
 
     def type_if_present(
         self,
@@ -288,14 +323,15 @@ class MobileActions:
     ) -> bool:
         """Type text into element if visible within timeout. Returns True if typed."""
 
-        try:
-            element = self._waiter.for_visibility(locator, timeout=timeout)
-            if clear_first:
-                element.clear()
-            element.send_keys(value)
-            return True
-        except Exception:
-            return False
+        with self._measure("type_if_present"):
+            try:
+                element = self._waiter.for_visibility(locator, timeout=timeout)
+                if clear_first:
+                    element.clear()
+                element.send_keys(value)
+                return True
+            except Exception:
+                return False
 
     def type_text_slowly(
         self,
@@ -311,35 +347,37 @@ class MobileActions:
         Useful for apps that drop characters under fast input.
         """
 
-        logger.debug(
-            "type_text_slowly  %s  value=%r  delay=%.2fs",
-            locator, value, delay_per_char,
-        )
-        try:
-            element = self._waiter.for_visibility(locator, timeout=timeout)
-            if clear_first:
-                element.clear()
-            for char in value:
-                element.send_keys(char)
-                time.sleep(delay_per_char)
-        except WebDriverException as exc:
-            raise ActionError(
-                f"Slow type failed for locator: {locator}",
-                locator=locator,
-                action="type_text_slowly"
-            ) from exc
+        with self._measure("type_text_slowly"):
+            logger.debug(
+                "type_text_slowly  %s  value=%r  delay=%.2fs",
+                locator, value, delay_per_char,
+            )
+            try:
+                element = self._waiter.for_visibility(locator, timeout=timeout)
+                if clear_first:
+                    element.clear()
+                for char in value:
+                    element.send_keys(char)
+                    time.sleep(delay_per_char)
+            except WebDriverException as exc:
+                raise ActionError(
+                    f"Slow type failed for locator: {locator}",
+                    locator=locator,
+                    action="type_text_slowly"
+                ) from exc
 
     def clear(self, locator: Locator, *, timeout: float = 10.0) -> None:
         """Clear the text content of an element."""
 
-        logger.debug("clear  %s", locator)
-        try:
-            element = self._waiter.for_visibility(locator, timeout=timeout)
-            element.clear()
-        except WebDriverException as exc:
-            raise ActionError(
-                f"Clear failed for locator: {locator}", locator=locator, action="clear"
-            ) from exc
+        with self._measure("clear"):
+            logger.debug("clear  %s", locator)
+            try:
+                element = self._waiter.for_visibility(locator, timeout=timeout)
+                element.clear()
+            except WebDriverException as exc:
+                raise ActionError(
+                    f"Clear failed for locator: {locator}", locator=locator, action="clear"
+                ) from exc
 
     # ------------------------------------------------------------------
     # Assertions
@@ -696,26 +734,27 @@ class MobileActions:
     ) -> None:
         """Perform a swipe gesture using W3C Pointer Actions."""
 
-        logger.debug(
-            "swipe  (%d,%d)->(%d,%d)  duration=%dms",
-            start_x, start_y, end_x, end_y, duration_ms,
-        )
-        try:
-            actions = ActionChains(self._driver)
-            actions.w3c_actions = ActionBuilder(
-                self._driver,
-                mouse=PointerInput(interaction.POINTER_TOUCH, "touch"),
+        with self._measure("swipe"):
+            logger.debug(
+                "swipe  (%d,%d)->(%d,%d)  duration=%dms",
+                start_x, start_y, end_x, end_y, duration_ms,
             )
-            actions.w3c_actions.pointer_action.move_to_location(start_x, start_y)
-            actions.w3c_actions.pointer_action.pointer_down()
-            actions.w3c_actions.pointer_action.pause(duration_ms / 1000)
-            actions.w3c_actions.pointer_action.move_to_location(end_x, end_y)
-            actions.w3c_actions.pointer_action.release()
-            actions.perform()
-        except WebDriverException as exc:
-            raise ActionError(
-                f"Swipe failed ({start_x},{start_y})->({end_x},{end_y})", action="swipe"
-            ) from exc
+            try:
+                actions = ActionChains(self._driver)
+                actions.w3c_actions = ActionBuilder(
+                    self._driver,
+                    mouse=PointerInput(interaction.POINTER_TOUCH, "touch"),
+                )
+                actions.w3c_actions.pointer_action.move_to_location(start_x, start_y)
+                actions.w3c_actions.pointer_action.pointer_down()
+                actions.w3c_actions.pointer_action.pause(duration_ms / 1000)
+                actions.w3c_actions.pointer_action.move_to_location(end_x, end_y)
+                actions.w3c_actions.pointer_action.release()
+                actions.perform()
+            except WebDriverException as exc:
+                raise ActionError(
+                    f"Swipe failed ({start_x},{start_y})->({end_x},{end_y})", action="swipe"
+                ) from exc
 
     def scroll_down(self, *, swipe_fraction: float = 0.5) -> None:
         """Scroll down by swiping upward across the screen center."""
@@ -749,26 +788,27 @@ class MobileActions:
     ) -> None:
         """Scroll until the element is visible or max_swipes is reached."""
 
-        logger.debug(
-            "scroll_to_element  %s  direction=%s  max_swipes=%d",
-            locator, direction, max_swipes,
-        )
-        for _ in range(max_swipes):
-            try:
-                self._waiter.for_visibility(locator, timeout=1.5)
-                return
-            except Exception:
-                pass
-            if direction == "down":
-                self.scroll_down(swipe_fraction=swipe_fraction)
-            else:
-                self.scroll_up(swipe_fraction=swipe_fraction)
+        with self._measure("scroll_to_element"):
+            logger.debug(
+                "scroll_to_element  %s  direction=%s  max_swipes=%d",
+                locator, direction, max_swipes,
+            )
+            for _ in range(max_swipes):
+                try:
+                    self._waiter.for_visibility(locator, timeout=1.5)
+                    return
+                except Exception:
+                    pass
+                if direction == "down":
+                    self.scroll_down(swipe_fraction=swipe_fraction)
+                else:
+                    self.scroll_up(swipe_fraction=swipe_fraction)
 
-        raise ActionError(
-            f"Element not found after {max_swipes} swipes: {locator}",
-            locator=locator,
-            action="scroll_to_element",
-        )
+            raise ActionError(
+                f"Element not found after {max_swipes} swipes: {locator}",
+                locator=locator,
+                action="scroll_to_element",
+            )
 
     # ------------------------------------------------------------------
     # Keyboard
@@ -804,94 +844,205 @@ class MobileActions:
     # App lifecycle / deep links
     # ------------------------------------------------------------------
 
+    def _capabilities(self) -> dict:
+        caps = getattr(self._driver, "capabilities", {}) or {}
+        return caps if isinstance(caps, dict) else {}
+
+    def _platform_name(self) -> str:
+        return str(self._capabilities().get("platformName", "")).strip().lower()
+
+    def _resolve_app_id(self, app_id: str | None) -> str:
+        if app_id and app_id.strip():
+            return app_id.strip()
+        caps = self._capabilities()
+        platform = self._platform_name()
+        if platform == "android":
+            resolved = caps.get("appPackage")
+        elif platform == "ios":
+            resolved = caps.get("bundleId")
+        else:
+            resolved = None
+        if resolved and str(resolved).strip():
+            return str(resolved).strip()
+        msg = (
+            "app_id is required (or must exist in capabilities as appPackage/bundleId)"
+        )
+        raise ActionError(msg, action="resolve_app_id")
+
     def activate_app(self, app_id: str) -> None:
         """Bring an installed app to foreground by package/bundle id."""
 
-        logger.debug("activate_app  %s", app_id)
-        try:
-            self._driver.activate_app(app_id)
-        except WebDriverException as exc:
-            raise ActionError(
-                f"activate_app({app_id!r}) failed",
-                action="activate_app",
-            ) from exc
+        with self._measure("activate_app"):
+            logger.debug("activate_app  %s", app_id)
+            try:
+                self._driver.activate_app(app_id)
+            except WebDriverException as exc:
+                raise ActionError(
+                    f"activate_app({app_id!r}) failed",
+                    action="activate_app",
+                ) from exc
 
     def terminate_app(self, app_id: str) -> None:
         """Terminate an installed app by package/bundle id."""
 
-        logger.debug("terminate_app  %s", app_id)
-        try:
-            self._driver.terminate_app(app_id)
-        except WebDriverException as exc:
-            raise ActionError(
-                f"terminate_app({app_id!r}) failed",
-                action="terminate_app",
-            ) from exc
+        with self._measure("terminate_app"):
+            logger.debug("terminate_app  %s", app_id)
+            try:
+                self._driver.terminate_app(app_id)
+            except WebDriverException as exc:
+                raise ActionError(
+                    f"terminate_app({app_id!r}) failed",
+                    action="terminate_app",
+                ) from exc
 
     def background_app(self, seconds: float = 1.0) -> None:
         """Send app to background for *seconds* and return it to foreground."""
 
-        logger.debug("background_app  %.1fs", seconds)
-        try:
-            self._driver.background_app(int(seconds))
-        except WebDriverException as exc:
-            raise ActionError(
-                f"background_app({seconds!r}) failed",
-                action="background_app",
-            ) from exc
+        with self._measure("background_app"):
+            logger.debug("background_app  %.1fs", seconds)
+            try:
+                self._driver.background_app(int(seconds))
+            except WebDriverException as exc:
+                raise ActionError(
+                    f"background_app({seconds!r}) failed",
+                    action="background_app",
+                ) from exc
+
+    def clear_app_data(self, app_id: str | None = None) -> None:
+        """Clear app user data (Android only) using `pm clear`."""
+
+        with self._measure("clear_app_data"):
+            platform = self._platform_name()
+            if platform != "android":
+                msg = "clear_app_data is currently supported only on Android"
+                raise ActionError(msg, action="clear_app_data")
+            package = self._resolve_app_id(app_id)
+
+            logger.debug("clear_app_data  package=%s", package)
+            try:
+                self._driver.execute_script(
+                    "mobile: shell",
+                    {"command": "pm", "args": ["clear", package]},
+                )
+            except WebDriverException as exc:
+                raise ActionError(
+                    f"clear_app_data({package!r}) failed",
+                    action="clear_app_data",
+                ) from exc
+
+    def reset_app_permissions(self) -> None:
+        """Reset runtime permissions (Android only) using `pm reset-permissions`."""
+
+        with self._measure("reset_app_permissions"):
+            platform = self._platform_name()
+            if platform != "android":
+                msg = "reset_app_permissions is currently supported only on Android"
+                raise ActionError(msg, action="reset_app_permissions")
+
+            logger.debug("reset_app_permissions")
+            try:
+                self._driver.execute_script(
+                    "mobile: shell",
+                    {"command": "pm", "args": ["reset-permissions"]},
+                )
+            except WebDriverException as exc:
+                raise ActionError(
+                    "reset_app_permissions failed",
+                    action="reset_app_permissions",
+                ) from exc
+
+    def reinstall_app(
+        self,
+        *,
+        app_id: str | None = None,
+        app_path: str | None = None,
+        activate_after_install: bool = True,
+    ) -> None:
+        """Reinstall app using `remove_app` + `install_app`, then optionally activate."""
+
+        with self._measure("reinstall_app"):
+            resolved_id = self._resolve_app_id(app_id)
+            resolved_path = app_path or self._capabilities().get("app")
+            if not resolved_path:
+                msg = "reinstall_app requires app_path (or app capability) to install from binary"
+                raise ActionError(msg, action="reinstall_app")
+            install_path = str(resolved_path)
+
+            logger.debug("reinstall_app  app_id=%s  app_path=%s", resolved_id, install_path)
+            try:
+                try:
+                    self._driver.terminate_app(resolved_id)
+                except WebDriverException:
+                    pass
+                self._driver.remove_app(resolved_id)
+                self._driver.install_app(install_path)
+                if activate_after_install:
+                    self._driver.activate_app(resolved_id)
+            except WebDriverException as exc:
+                raise ActionError(
+                    f"reinstall_app({resolved_id!r}) failed",
+                    action="reinstall_app",
+                ) from exc
 
     def open_deep_link(self, url: str, *, app_id: str | None = None) -> None:
         """Open a deep link via Appium mobile command."""
 
-        capabilities = getattr(self._driver, "capabilities", {}) or {}
-        platform = str(capabilities.get("platformName", "")).lower()
+        with self._measure("open_deep_link"):
+            capabilities = self._capabilities()
+            platform = self._platform_name()
 
-        if platform == "android":
-            package = app_id or capabilities.get("appPackage")
-            if not package:
-                msg = "open_deep_link requires Android package (app_id or appPackage capability)"
+            if platform == "android":
+                package = app_id or capabilities.get("appPackage")
+                if not package:
+                    msg = (
+                        "open_deep_link requires Android package "
+                        "(app_id or appPackage capability)"
+                    )
+                    raise ActionError(msg, action="open_deep_link")
+                payload = {"url": url, "package": package}
+            elif platform == "ios":
+                bundle_id = app_id or capabilities.get("bundleId")
+                if not bundle_id:
+                    msg = "open_deep_link requires iOS bundle id (app_id or bundleId capability)"
+                    raise ActionError(msg, action="open_deep_link")
+                payload = {"url": url, "bundleId": bundle_id}
+            else:
+                msg = f"open_deep_link is not supported for platform: {platform or 'unknown'}"
                 raise ActionError(msg, action="open_deep_link")
-            payload = {"url": url, "package": package}
-        elif platform == "ios":
-            bundle_id = app_id or capabilities.get("bundleId")
-            if not bundle_id:
-                msg = "open_deep_link requires iOS bundle id (app_id or bundleId capability)"
-                raise ActionError(msg, action="open_deep_link")
-            payload = {"url": url, "bundleId": bundle_id}
-        else:
-            msg = f"open_deep_link is not supported for platform: {platform or 'unknown'}"
-            raise ActionError(msg, action="open_deep_link")
 
-        logger.debug("open_deep_link  %s  app_id=%s", url, app_id or "auto")
-        if platform == "ios":
-            bundle_id = payload["bundleId"]
+            logger.debug("open_deep_link  %s  app_id=%s", url, app_id or "auto")
+            if platform == "ios":
+                bundle_id = payload["bundleId"]
+                try:
+                    self._driver.execute_script("mobile: deepLink", payload)
+                    return
+                except WebDriverException as deep_link_exc:
+                    logger.debug(
+                        "open_deep_link iOS fallback: mobile: deepLink failed (%s), "
+                        "trying driver.get",
+                        deep_link_exc,
+                    )
+                    try:
+                        self._driver.get(url)
+                        # Bring target app back to foreground after URL open if Safari/UI changed
+                        # focus.
+                        self._driver.activate_app(bundle_id)
+                        return
+                    except WebDriverException as fallback_exc:
+                        msg = (
+                            f"open_deep_link({url!r}) failed via mobile: deepLink and iOS "
+                            "fallback. "
+                            f"deepLink error: {deep_link_exc}"
+                        )
+                        raise ActionError(msg, action="open_deep_link") from fallback_exc
+
             try:
                 self._driver.execute_script("mobile: deepLink", payload)
-                return
-            except WebDriverException as deep_link_exc:
-                logger.debug(
-                    "open_deep_link iOS fallback: mobile: deepLink failed (%s), trying driver.get",
-                    deep_link_exc,
-                )
-                try:
-                    self._driver.get(url)
-                    # Bring target app back to foreground after URL open if Safari/UI changed focus.
-                    self._driver.activate_app(bundle_id)
-                    return
-                except WebDriverException as fallback_exc:
-                    msg = (
-                        f"open_deep_link({url!r}) failed via mobile: deepLink and iOS fallback. "
-                        f"deepLink error: {deep_link_exc}"
-                    )
-                    raise ActionError(msg, action="open_deep_link") from fallback_exc
-
-        try:
-            self._driver.execute_script("mobile: deepLink", payload)
-        except WebDriverException as exc:
-            raise ActionError(
-                f"open_deep_link({url!r}) failed",
-                action="open_deep_link",
-            ) from exc
+            except WebDriverException as exc:
+                raise ActionError(
+                    f"open_deep_link({url!r}) failed",
+                    action="open_deep_link",
+                ) from exc
 
     # ------------------------------------------------------------------
     # Context switching (hybrid apps)

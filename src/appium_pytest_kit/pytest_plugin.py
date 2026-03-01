@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import shutil
+import time
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
@@ -62,6 +63,8 @@ RETRY_FAIL_COUNT_KEY: StashKey[dict[str, int]] = StashKey()
 KEEP_DRIVER_ALIVE_KEY: StashKey[bool] = StashKey()
 FLAKE_ANALYTICS_KEY: StashKey[dict[str, Any]] = StashKey()
 XDIST_WARNED_COLLISION_KEYS: StashKey[set[str]] = StashKey()
+PERF_ANALYTICS_KEY: StashKey[dict[str, Any]] = StashKey()
+ACTION_PERF_EVENTS_KEY: StashKey[list[dict[str, Any]]] = StashKey()
 _WORKER_INDEX_RE = re.compile(r"(\d+)$")
 
 
@@ -331,6 +334,342 @@ def _summary_int(summary: dict[str, Any], key: str) -> int:
         return 0
 
 
+def _summary_float(summary: dict[str, Any], key: str) -> float:
+    value = summary.get(key, 0.0)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _new_perf_analytics() -> dict[str, Any]:
+    return {
+        "session_start_ms": [],
+        "action_events": [],
+        "tests": {},
+        "budget_violations": [],
+    }
+
+
+def _percentile(values: list[float], percentile: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(float(v) for v in values)
+    if len(ordered) == 1:
+        return ordered[0]
+    rank = (len(ordered) - 1) * (percentile / 100.0)
+    low = int(rank)
+    high = min(low + 1, len(ordered) - 1)
+    weight = rank - low
+    return ordered[low] + (ordered[high] - ordered[low]) * weight
+
+
+def _record_perf_session_start(
+    config: Config,
+    *,
+    nodeid: str,
+    duration_ms: float,
+    session_scope: str,
+) -> None:
+    settings = config.stash.get(SETTINGS_KEY, None)
+    if settings is None or not settings.perf_enabled:
+        return
+
+    analytics = config.stash.get(PERF_ANALYTICS_KEY, None)
+    if analytics is None:
+        return
+
+    rendered_duration = round(float(duration_ms), 3)
+    analytics["session_start_ms"].append(rendered_duration)
+
+    budget = settings.perf_budget_session_start_ms
+    if budget is None or rendered_duration <= float(budget):
+        return
+
+    violation = {
+        "kind": "session_start_budget",
+        "nodeid": nodeid,
+        "scope": session_scope,
+        "duration_ms": rendered_duration,
+        "threshold_ms": float(budget),
+    }
+    analytics["budget_violations"].append(violation)
+    logger.warning(
+        "perf:budget session_start  node=%s  scope=%s  duration=%.1fms  threshold=%.1fms",
+        nodeid,
+        session_scope,
+        rendered_duration,
+        float(budget),
+    )
+
+
+def _record_perf_test_result(item: pytest.Item, report: pytest.TestReport) -> None:
+    settings = item.config.stash.get(SETTINGS_KEY, None)
+    if settings is None or not settings.perf_enabled:
+        return
+
+    analytics = item.config.stash.get(PERF_ANALYTICS_KEY, None)
+    if analytics is None:
+        return
+
+    raw_events = item.stash.get(ACTION_PERF_EVENTS_KEY, [])
+    sanitized_events: list[dict[str, Any]] = []
+    for entry in raw_events:
+        if not isinstance(entry, dict):
+            continue
+        action = str(entry.get("action", "unknown")).strip() or "unknown"
+        status = str(entry.get("status", "unknown")).strip() or "unknown"
+        try:
+            duration_ms = round(float(entry.get("duration_ms", 0.0)), 3)
+        except (TypeError, ValueError):
+            duration_ms = 0.0
+        row = {
+            "nodeid": item.nodeid,
+            "action": action,
+            "status": status,
+            "duration_ms": duration_ms,
+        }
+        sanitized_events.append(row)
+        analytics["action_events"].append(row)
+
+    test_duration_ms = round(float(report.duration) * 1000.0, 3)
+    action_durations = [float(row.get("duration_ms", 0.0)) for row in sanitized_events]
+    action_total_ms = round(sum(action_durations), 3)
+    action_max_ms = round(max(action_durations), 3) if action_durations else 0.0
+    action_p95_ms = round(_percentile(action_durations, 95.0), 3) if action_durations else 0.0
+
+    analytics["tests"][item.nodeid] = {
+        "outcome": str(report.outcome),
+        "test_duration_ms": test_duration_ms,
+        "action_count": len(sanitized_events),
+        "action_total_ms": action_total_ms,
+        "action_max_ms": action_max_ms,
+        "action_p95_ms": action_p95_ms,
+    }
+
+    if settings.perf_budget_test_ms is not None and test_duration_ms > settings.perf_budget_test_ms:
+        violation = {
+            "kind": "test_budget",
+            "nodeid": item.nodeid,
+            "duration_ms": test_duration_ms,
+            "threshold_ms": float(settings.perf_budget_test_ms),
+        }
+        analytics["budget_violations"].append(violation)
+        logger.warning(
+            "perf:budget test_duration  node=%s  duration=%.1fms  threshold=%.1fms",
+            item.nodeid,
+            test_duration_ms,
+            float(settings.perf_budget_test_ms),
+        )
+
+    if settings.perf_budget_action_ms is not None and action_durations:
+        over_budget = [ms for ms in action_durations if ms > float(settings.perf_budget_action_ms)]
+        if over_budget:
+            violation = {
+                "kind": "action_budget",
+                "nodeid": item.nodeid,
+                "violations": len(over_budget),
+                "max_duration_ms": round(max(over_budget), 3),
+                "threshold_ms": float(settings.perf_budget_action_ms),
+            }
+            analytics["budget_violations"].append(violation)
+            logger.warning(
+                "perf:budget action_duration  node=%s  over=%d  max=%.1fms  threshold=%.1fms",
+                item.nodeid,
+                len(over_budget),
+                round(max(over_budget), 3),
+                float(settings.perf_budget_action_ms),
+            )
+
+
+def _prepare_perf_payload(analytics: dict[str, Any]) -> dict[str, Any]:
+    session_start_ms = [
+        float(value)
+        for value in analytics.get("session_start_ms", [])
+        if isinstance(value, (int, float))
+    ]
+    action_events = [
+        row for row in analytics.get("action_events", []) if isinstance(row, dict)
+    ]
+
+    tests_payload: list[dict[str, Any]] = []
+    tests_raw = analytics.get("tests", {})
+    if isinstance(tests_raw, dict):
+        for nodeid, row in sorted(tests_raw.items()):
+            if not isinstance(row, dict):
+                continue
+            tests_payload.append(
+                {
+                    "nodeid": nodeid,
+                    "outcome": str(row.get("outcome", "unknown")),
+                    "test_duration_ms": round(float(row.get("test_duration_ms", 0.0)), 3),
+                    "action_count": int(row.get("action_count", 0)),
+                    "action_total_ms": round(float(row.get("action_total_ms", 0.0)), 3),
+                    "action_max_ms": round(float(row.get("action_max_ms", 0.0)), 3),
+                    "action_p95_ms": round(float(row.get("action_p95_ms", 0.0)), 3),
+                }
+            )
+
+    action_durations = [float(row.get("duration_ms", 0.0)) for row in action_events]
+    test_durations = [float(row.get("test_duration_ms", 0.0)) for row in tests_payload]
+    violations = [
+        row for row in analytics.get("budget_violations", []) if isinstance(row, dict)
+    ]
+
+    slowest_actions = sorted(
+        action_events,
+        key=lambda row: float(row.get("duration_ms", 0.0)),
+        reverse=True,
+    )[:10]
+
+    return {
+        "summary": {
+            "tests_measured": len(tests_payload),
+            "action_events_total": len(action_events),
+            "budget_violations": len(violations),
+            "session_start_ms_avg": round(
+                (sum(session_start_ms) / len(session_start_ms)) if session_start_ms else 0.0,
+                3,
+            ),
+            "session_start_ms_p95": round(_percentile(session_start_ms, 95.0), 3),
+            "session_start_ms_max": round(max(session_start_ms), 3) if session_start_ms else 0.0,
+            "action_ms_avg": round(
+                (sum(action_durations) / len(action_durations)) if action_durations else 0.0,
+                3,
+            ),
+            "action_ms_p95": round(_percentile(action_durations, 95.0), 3),
+            "action_ms_max": round(max(action_durations), 3) if action_durations else 0.0,
+            "test_ms_avg": round(
+                (sum(test_durations) / len(test_durations)) if test_durations else 0.0,
+                3,
+            ),
+            "test_ms_p95": round(_percentile(test_durations, 95.0), 3),
+            "test_ms_max": round(max(test_durations), 3) if test_durations else 0.0,
+        },
+        "session_start_ms": [round(value, 3) for value in session_start_ms],
+        "action_events": action_events,
+        "tests": tests_payload,
+        "slowest_actions": slowest_actions,
+        "budget_violations": violations,
+    }
+
+
+def _write_perf_report(report_dir: Path, analytics: dict[str, Any]) -> Path:
+    report_dir.mkdir(parents=True, exist_ok=True)
+    payload = _prepare_perf_payload(analytics)
+    output_path = report_dir / "perf-summary.json"
+    output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return output_path
+
+
+def _write_perf_trend_report(
+    report_dir: Path,
+    run_payload: dict[str, Any],
+    *,
+    history_limit: int = 30,
+) -> Path:
+    report_dir.mkdir(parents=True, exist_ok=True)
+    trend_path = report_dir / "perf-trend.json"
+
+    history: list[dict[str, Any]] = []
+    existing = _load_json_mapping(trend_path)
+    if existing is not None:
+        raw_history = existing.get("history", [])
+        if isinstance(raw_history, list):
+            history = [entry for entry in raw_history if isinstance(entry, dict)]
+
+    summary = run_payload.get("summary", {})
+    if not isinstance(summary, dict):
+        summary = {}
+
+    run_summary = {
+        "tests_measured": _summary_int(summary, "tests_measured"),
+        "action_events_total": _summary_int(summary, "action_events_total"),
+        "budget_violations": _summary_int(summary, "budget_violations"),
+        "session_start_ms_p95": round(_summary_float(summary, "session_start_ms_p95"), 3),
+        "action_ms_p95": round(_summary_float(summary, "action_ms_p95"), 3),
+        "test_ms_p95": round(_summary_float(summary, "test_ms_p95"), 3),
+    }
+    run_entry = {
+        "timestamp_utc": (
+            datetime.now(tz=UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        ),
+        "summary": run_summary,
+    }
+    history.append(run_entry)
+    history = history[-max(1, history_limit):]
+
+    latest_summary = history[-1]["summary"]
+    previous_summary = history[-2]["summary"] if len(history) > 1 else None
+    tracked_fields = [
+        "tests_measured",
+        "action_events_total",
+        "budget_violations",
+        "session_start_ms_p95",
+        "action_ms_p95",
+        "test_ms_p95",
+    ]
+    delta_from_previous = {
+        key: (
+            round(float(latest_summary.get(key, 0.0)) - float(previous_summary.get(key, 0.0)), 3)
+            if previous_summary is not None
+            else None
+        )
+        for key in tracked_fields
+    }
+    payload = {
+        "trend": {
+            "runs_tracked": len(history),
+            "latest_summary": latest_summary,
+            "previous_summary": previous_summary,
+            "delta_from_previous": delta_from_previous,
+        },
+        "history": history,
+    }
+    trend_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return trend_path
+
+
+def _merge_xdist_perf_reports(report_dir: Path) -> Path | None:
+    workers_root = report_dir / "workers"
+    if not workers_root.exists():
+        return None
+
+    merged_analytics = _new_perf_analytics()
+    merged_tests: dict[str, dict[str, Any]] = merged_analytics["tests"]
+    for perf_file in sorted(workers_root.glob("*/perf-summary.json")):
+        payload = _load_json_mapping(perf_file)
+        if payload is None:
+            continue
+        merged_analytics["session_start_ms"].extend(
+            value
+            for value in payload.get("session_start_ms", [])
+            if isinstance(value, (int, float))
+        )
+        merged_analytics["action_events"].extend(
+            row for row in payload.get("action_events", []) if isinstance(row, dict)
+        )
+        merged_analytics["budget_violations"].extend(
+            row for row in payload.get("budget_violations", []) if isinstance(row, dict)
+        )
+        for row in payload.get("tests", []):
+            if not isinstance(row, dict):
+                continue
+            nodeid = str(row.get("nodeid", "")).strip()
+            if not nodeid:
+                continue
+            merged_tests[nodeid] = {
+                "outcome": str(row.get("outcome", "unknown")),
+                "test_duration_ms": round(float(row.get("test_duration_ms", 0.0)), 3),
+                "action_count": int(row.get("action_count", 0)),
+                "action_total_ms": round(float(row.get("action_total_ms", 0.0)), 3),
+                "action_max_ms": round(float(row.get("action_max_ms", 0.0)), 3),
+                "action_p95_ms": round(float(row.get("action_p95_ms", 0.0)), 3),
+            }
+
+    return _write_perf_report(report_dir, merged_analytics)
+
+
 def _write_flake_trend_report(
     report_dir: Path,
     run_payload: dict[str, Any],
@@ -579,6 +918,11 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     group.addoption("--app-video-policy", action="store", default=None)
     group.addoption("--app-artifacts-dir", action="store", default=None)
     group.addoption("--app-builds-dir", action="store", default=None)
+    group.addoption("--app-quarantine-mode", action="store", default=None)
+    group.addoption("--app-perf-budget-action-ms", action="store", default=None)
+    group.addoption("--app-perf-budget-test-ms", action="store", default=None)
+    group.addoption("--app-perf-budget-session-start-ms", action="store", default=None)
+    group.addoption("--app-perf-trend-history-limit", action="store", default=None)
 
     group.addoption(
         "--app-strict-config",
@@ -653,6 +997,54 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         dest="app_clean_artifacts_on_start",
     )
     group.addoption(
+        "--app-perf-enabled",
+        action="store_true",
+        default=None,
+        dest="app_perf_enabled",
+    )
+    group.addoption(
+        "--no-app-perf-enabled",
+        action="store_false",
+        default=None,
+        dest="app_perf_enabled",
+    )
+    group.addoption(
+        "--app-artifact-redaction-enabled",
+        action="store_true",
+        default=None,
+        dest="app_artifact_redaction_enabled",
+    )
+    group.addoption(
+        "--no-app-artifact-redaction-enabled",
+        action="store_false",
+        default=None,
+        dest="app_artifact_redaction_enabled",
+    )
+    group.addoption(
+        "--app-artifact-redact-screenshots",
+        action="store_true",
+        default=None,
+        dest="app_artifact_redact_screenshots",
+    )
+    group.addoption(
+        "--no-app-artifact-redact-screenshots",
+        action="store_false",
+        default=None,
+        dest="app_artifact_redact_screenshots",
+    )
+    group.addoption(
+        "--app-artifact-redaction-replacement",
+        action="store",
+        default=None,
+        dest="app_artifact_redaction_replacement",
+    )
+    group.addoption(
+        "--app-artifact-redaction-patterns",
+        action="store",
+        default=None,
+        dest="app_artifact_redaction_patterns",
+    )
+    group.addoption(
         "--app-preflight-status",
         action="store_true",
         default=None,
@@ -716,10 +1108,24 @@ def _collect_cli_overrides(config: Config) -> dict[str, Any]:
             "app_video_policy": config.getoption("app_video_policy"),
             "app_artifacts_dir": config.getoption("app_artifacts_dir"),
             "app_builds_dir": config.getoption("app_builds_dir"),
+            "app_quarantine_mode": config.getoption("app_quarantine_mode"),
+            "app_perf_budget_action_ms": config.getoption("app_perf_budget_action_ms"),
+            "app_perf_budget_test_ms": config.getoption("app_perf_budget_test_ms"),
+            "app_perf_budget_session_start_ms": config.getoption(
+                "app_perf_budget_session_start_ms"
+            ),
+            "app_perf_trend_history_limit": config.getoption("app_perf_trend_history_limit"),
             "app_is_simulator": config.getoption("app_is_simulator"),
             "app_strict_config": config.getoption("app_strict_config"),
             "app_auto_discover": config.getoption("app_auto_discover"),
             "app_clean_artifacts_on_start": config.getoption("app_clean_artifacts_on_start"),
+            "app_perf_enabled": config.getoption("app_perf_enabled"),
+            "app_artifact_redaction_enabled": config.getoption("app_artifact_redaction_enabled"),
+            "app_artifact_redact_screenshots": config.getoption("app_artifact_redact_screenshots"),
+            "app_artifact_redaction_replacement": config.getoption(
+                "app_artifact_redaction_replacement"
+            ),
+            "app_artifact_redaction_patterns": config.getoption("app_artifact_redaction_patterns"),
             "appium_preflight_status": config.getoption("app_preflight_status"),
         }.items()
         if value is not None
@@ -734,6 +1140,11 @@ def _collect_cli_overrides(config: Config) -> dict[str, Any]:
 
 def pytest_configure(config: Config) -> None:
     """Load and stash framework settings at session start."""
+
+    config.addinivalue_line(
+        "markers",
+        "quarantine: test is quarantined (excluded from default lanes, tracked separately).",
+    )
 
     env_file = config.getoption("app_env_file")
     settings = load_settings(env_file=env_file)
@@ -757,6 +1168,7 @@ def pytest_configure(config: Config) -> None:
     config.stash[RETRY_RECORDER_REGISTRY_KEY] = {}
     config.stash[RETRY_FAIL_COUNT_KEY] = {}
     config.stash[FLAKE_ANALYTICS_KEY] = _new_flake_analytics()
+    config.stash[PERF_ANALYTICS_KEY] = _new_perf_analytics()
     config.stash[XDIST_WARNED_COLLISION_KEYS] = set()
 
     if settings.reporting_enabled:
@@ -770,6 +1182,21 @@ def pytest_configure(config: Config) -> None:
             config.stash[REPORTER_KEY] = SessionReportCollector(output_dir=settings.report_dir)
     else:
         config.stash[REPORTER_KEY] = None
+
+
+def pytest_collection_modifyitems(config: Config, items: list[pytest.Item]) -> None:
+    """Apply quarantine marker behavior for suites that want to skip quarantined tests."""
+
+    settings = config.stash.get(SETTINGS_KEY, None)
+    if settings is None:
+        return
+    if settings.quarantine_mode != "skip":
+        return
+
+    skip_marker = pytest.mark.skip(reason="quarantine test (APP_QUARANTINE_MODE=skip)")
+    for item in items:
+        if item.get_closest_marker("quarantine"):
+            item.add_marker(skip_marker)
 
 
 @pytest.fixture(scope="session")
@@ -816,7 +1243,14 @@ def _driver_shared(
         return
 
     config = _build_final_config(settings, appium_server, request, info=device_info)
+    started = time.perf_counter()
     created_driver = create_driver(config)
+    _record_perf_session_start(
+        request.config,
+        nodeid="session::shared_driver",
+        duration_ms=(time.perf_counter() - started) * 1000.0,
+        session_scope="session",
+    )
     logger.info(
         "driver:created  session=%s  platform=%s  mode=%s",
         getattr(created_driver, "session_id", "?"),
@@ -945,7 +1379,14 @@ def driver(settings, appium_server: AppiumServerInfo, device_info: DeviceInfo | 
     else:
         # ── First attempt: start a new session ───────────────────────────
         final_config = _build_final_config(settings, appium_server, request, info=device_info)
+        started = time.perf_counter()
         active_driver = create_driver(final_config)
+        _record_perf_session_start(
+            request.config,
+            nodeid=nodeid,
+            duration_ms=(time.perf_counter() - started) * 1000.0,
+            session_scope="function",
+        )
         logger.info(
             "driver:created  session=%s  platform=%s  node=%s",
             getattr(active_driver, "session_id", "?"),
@@ -1013,10 +1454,33 @@ def waiter(driver, settings) -> Waiter:
 
 
 @pytest.fixture
-def actions(driver, waiter: Waiter) -> MobileActions:
+def actions(
+    driver,
+    waiter: Waiter,
+    settings: AppiumPytestKitSettings,
+    request: pytest.FixtureRequest,
+) -> MobileActions:
     """Reusable app-agnostic actions fixture."""
 
-    return MobileActions(driver=driver, waiter=waiter)
+    request.node.stash[ACTION_PERF_EVENTS_KEY] = []
+
+    def _perf_sink(action: str, duration_ms: float, status: str) -> None:
+        events = request.node.stash.get(ACTION_PERF_EVENTS_KEY, [])
+        events.append(
+            {
+                "action": action,
+                "duration_ms": round(float(duration_ms), 3),
+                "status": status,
+            }
+        )
+        request.node.stash[ACTION_PERF_EVENTS_KEY] = events
+
+    return MobileActions(
+        driver=driver,
+        waiter=waiter,
+        perf_enabled=settings.perf_enabled,
+        perf_sink=_perf_sink,
+    )
 
 
 @pytest.fixture
@@ -1099,8 +1563,21 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]):
         if active_driver is not None and settings is not None:
             artifacts_dir = settings.artifacts_dir
 
-            screenshot_path = capture_screenshot(active_driver, item.nodeid, artifacts_dir)
-            pagesource_path = capture_page_source(active_driver, item.nodeid, artifacts_dir)
+            screenshot_path = capture_screenshot(
+                active_driver,
+                item.nodeid,
+                artifacts_dir,
+                redact=settings.artifact_redaction_enabled,
+                redact_screenshot=settings.artifact_redact_screenshots,
+            )
+            pagesource_path = capture_page_source(
+                active_driver,
+                item.nodeid,
+                artifacts_dir,
+                redact=settings.artifact_redaction_enabled,
+                redaction_patterns=settings.artifact_redaction_patterns,
+                redaction_replacement=settings.artifact_redaction_replacement,
+            )
             device_log_path = capture_device_logs(
                 active_driver,
                 item.nodeid,
@@ -1108,8 +1585,18 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]):
                 platform=settings.platform,
                 udid=settings.udid,
                 is_simulator=settings.is_simulator,
+                redact=settings.artifact_redaction_enabled,
+                redaction_patterns=settings.artifact_redaction_patterns,
+                redaction_replacement=settings.artifact_redaction_replacement,
             )
-            session_log_path = capture_session_log(active_driver, item.nodeid, artifacts_dir)
+            session_log_path = capture_session_log(
+                active_driver,
+                item.nodeid,
+                artifacts_dir,
+                redact=settings.artifact_redaction_enabled,
+                redaction_patterns=settings.artifact_redaction_patterns,
+                redaction_replacement=settings.artifact_redaction_replacement,
+            )
 
             if screenshot_path and screenshot_path.exists():
                 logger.info("artifact:screenshot  %s", screenshot_path)
@@ -1140,6 +1627,9 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]):
             if active_driver is not None:
                 recorder.stop_and_save(active_driver, item.nodeid, settings.artifacts_dir, settings)
 
+    if report.when == "call":
+        _record_perf_test_result(item, report)
+
     return report
 
 
@@ -1148,13 +1638,24 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
 
     settings: AppiumPytestKitSettings | None = session.config.stash.get(SETTINGS_KEY, None)
     if _is_xdist_controller(session.config):
-        if settings is not None and settings.reporting_enabled:
-            _merge_xdist_worker_reports(settings.report_dir)
-            merged_flake_path = _merge_xdist_flake_reports(settings.report_dir)
-            if merged_flake_path is not None:
-                merged_payload = _load_json_mapping(merged_flake_path)
-                if merged_payload is not None:
-                    _write_flake_trend_report(settings.report_dir, merged_payload)
+        if settings is not None:
+            if settings.reporting_enabled:
+                _merge_xdist_worker_reports(settings.report_dir)
+                merged_flake_path = _merge_xdist_flake_reports(settings.report_dir)
+                if merged_flake_path is not None:
+                    merged_payload = _load_json_mapping(merged_flake_path)
+                    if merged_payload is not None:
+                        _write_flake_trend_report(settings.report_dir, merged_payload)
+            if settings.perf_enabled:
+                merged_perf_path = _merge_xdist_perf_reports(settings.report_dir)
+                if merged_perf_path is not None:
+                    merged_perf_payload = _load_json_mapping(merged_perf_path)
+                    if merged_perf_payload is not None:
+                        _write_perf_trend_report(
+                            settings.report_dir,
+                            merged_perf_payload,
+                            history_limit=settings.perf_trend_history_limit,
+                        )
     else:
         reporter = session.config.stash.get(REPORTER_KEY, None)
         if reporter is not None:
@@ -1172,6 +1673,23 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
                 payload = _load_json_mapping(flake_path)
                 if payload is not None:
                     _write_flake_trend_report(settings.report_dir, payload)
+        if settings is not None and settings.perf_enabled:
+            perf_analytics = session.config.stash.get(PERF_ANALYTICS_KEY, _new_perf_analytics())
+            worker_id = _xdist_worker_id(session.config)
+            report_dir = (
+                settings.report_dir / "workers" / worker_id
+                if worker_id is not None
+                else settings.report_dir
+            )
+            perf_path = _write_perf_report(report_dir, perf_analytics)
+            if worker_id is None:
+                payload = _load_json_mapping(perf_path)
+                if payload is not None:
+                    _write_perf_trend_report(
+                        settings.report_dir,
+                        payload,
+                        history_limit=settings.perf_trend_history_limit,
+                    )
 
     registry: dict[str, Any] = session.config.stash.get(RETRY_DRIVER_REGISTRY_KEY, {})
     for drv in list(registry.values()):

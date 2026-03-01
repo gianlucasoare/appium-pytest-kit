@@ -89,6 +89,12 @@ pytest --app-env-file /path/to/staging.env
 | `APP_EXPLICIT_WAIT_TIMEOUT` | `explicit_wait_timeout` | `float` | `10.0` | Default timeout for `Waiter` and `MobileActions` explicit waits |
 | `APP_CAPABILITIES_JSON` | `capabilities_json` | JSON object | `{}` | Extra capabilities merged last — takes highest precedence |
 | `APP_STRICT_CONFIG` | `strict_config` | `bool` | `false` | Fail fast on unknown `APP_*` setting keys, override keys, and capability keys |
+| `APP_QUARANTINE_MODE` | `quarantine_mode` | `run\|skip` | `run` | `skip` marks `@pytest.mark.quarantine` tests as skipped during collection |
+| `APP_PERF_ENABLED` | `perf_enabled` | `bool` | `false` | Enable performance telemetry (`perf-summary.json` + `perf-trend.json`) |
+| `APP_PERF_BUDGET_ACTION_MS` | `perf_budget_action_ms` | `float\|None` | `None` | Soft warning threshold for single action latency |
+| `APP_PERF_BUDGET_TEST_MS` | `perf_budget_test_ms` | `float\|None` | `None` | Soft warning threshold for call-phase test duration |
+| `APP_PERF_BUDGET_SESSION_START_MS` | `perf_budget_session_start_ms` | `float\|None` | `None` | Soft warning threshold for driver creation latency |
+| `APP_PERF_TREND_HISTORY_LIMIT` | `perf_trend_history_limit` | `int` | `30` | Number of runs retained in `perf-trend.json` |
 
 ### xdist parallel workers
 
@@ -110,6 +116,10 @@ across workers.
 |---|---|---|---|---|
 | `APP_ARTIFACTS_DIR` | `artifacts_dir` | `str` | `artifacts` | Root directory for screenshots, page source, and videos |
 | `APP_CLEAN_ARTIFACTS_ON_START` | `clean_artifacts_on_start` | `bool` | `false` | Remove existing artifact files at session start |
+| `APP_ARTIFACT_REDACTION_ENABLED` | `artifact_redaction_enabled` | `bool` | `false` | Redact sensitive tokens in page source and log artifacts |
+| `APP_ARTIFACT_REDACT_SCREENSHOTS` | `artifact_redact_screenshots` | `bool` | `false` | Replace screenshots with a placeholder pixel for strict privacy |
+| `APP_ARTIFACT_REDACTION_REPLACEMENT` | `artifact_redaction_replacement` | `str` | `[REDACTED]` | Replacement text used for redacted values |
+| `APP_ARTIFACT_REDACTION_PATTERNS` | `artifact_redaction_patterns` | comma-sep regex | `""` | Additional regex patterns to redact from text artifacts |
 | `APP_VIDEO_POLICY` | `video_policy` | `always\|failed\|never` | `never` | When to record and save video |
 | `APP_REPORTING_ENABLED` | `reporting_enabled` | `bool` | `false` | Write a JSON summary report after the session |
 | `APP_REPORT_DIR` | `report_dir` | `str` | `artifacts/appium-pytest-kit` | Directory for the JSON report |
@@ -177,9 +187,19 @@ pytest --app-builds-dir app_builds
 pytest --app-is-simulator
 pytest --app-auto-discover
 pytest --app-clean-artifacts-on-start
+pytest --app-artifact-redaction-enabled
+pytest --app-artifact-redact-screenshots
+pytest --app-artifact-redaction-replacement "[MASKED]"
+pytest --app-artifact-redaction-patterns "email=([^\\s]+),session=([A-Za-z0-9]+)"
 pytest --app-preflight-status
 pytest --app-manage-appium-server
 pytest --app-reporting-enabled
+pytest --app-quarantine-mode skip
+pytest --app-perf-enabled
+pytest --app-perf-budget-action-ms 800
+pytest --app-perf-budget-test-ms 15000
+pytest --app-perf-budget-session-start-ms 6000
+pytest --app-perf-trend-history-limit 50
 pytest --app-capabilities-json '{"autoGrantPermissions": true}'
 pytest --app-override APP_EXPLICIT_WAIT_TIMEOUT=15
 pytest --app-strict-config

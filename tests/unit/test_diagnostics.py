@@ -45,6 +45,20 @@ class TestCaptureScreenshot:
 
         assert result is None
 
+    def test_writes_placeholder_when_screenshot_redaction_enabled(self, tmp_path: Path) -> None:
+        driver = MagicMock()
+        result = capture_screenshot(
+            driver,
+            "test_foo::bar",
+            tmp_path,
+            redact=True,
+            redact_screenshot=True,
+        )
+
+        assert result is not None
+        assert result.read_bytes(), "redacted screenshot placeholder should be written"
+        driver.save_screenshot.assert_not_called()
+
 
 class TestCapturePageSource:
     def test_saves_page_source_and_returns_path(self, tmp_path: Path) -> None:
@@ -68,6 +82,24 @@ class TestCapturePageSource:
         result = capture_page_source(driver, "test_foo", tmp_path)
 
         assert result is None
+
+    def test_redacts_sensitive_values_in_page_source(self, tmp_path: Path) -> None:
+        driver = MagicMock()
+        driver.page_source = "<xml>access_token=abc123 email=test@example.com</xml>"
+
+        result = capture_page_source(
+            driver,
+            "test_foo::bar",
+            tmp_path,
+            redact=True,
+            redaction_patterns=(r"(email=)([^<\\s]+)",),
+            redaction_replacement="[MASKED]",
+        )
+
+        assert result is not None
+        payload = result.read_text(encoding="utf-8")
+        assert "access_token=[MASKED]" in payload
+        assert "email=[MASKED]" in payload
 
 
 class TestCaptureDeviceLogs:
@@ -118,6 +150,27 @@ class TestCaptureDeviceLogs:
         result = capture_device_logs(driver, "test_missing::logs", tmp_path, platform="android")
         assert result is None
 
+    def test_redacts_sensitive_values_in_device_logs(self, tmp_path: Path, monkeypatch) -> None:
+        driver = MagicMock()
+        driver.capabilities = {"platformName": "android"}
+
+        def _fake_run(cmd, **kwargs):
+            return subprocess.CompletedProcess(
+                cmd, 0, stdout="Authorization: Bearer SECRET123", stderr=""
+            )
+
+        monkeypatch.setattr("appium_pytest_kit._internal.diagnostics.subprocess.run", _fake_run)
+        result = capture_device_logs(
+            driver,
+            "test_redact::logs",
+            tmp_path,
+            platform="android",
+            redact=True,
+        )
+
+        assert result is not None
+        assert "SECRET123" not in result.read_text(encoding="utf-8")
+
 
 class TestCaptureSessionLog:
     def test_saves_driver_session_log_when_available(self, tmp_path: Path) -> None:
@@ -143,3 +196,19 @@ class TestCaptureSessionLog:
 
         result = capture_session_log(driver, "tests::session", tmp_path)
         assert result is None
+
+    def test_redacts_sensitive_values_in_session_logs(self, tmp_path: Path) -> None:
+        driver = MagicMock()
+        driver.log_types = ["server"]
+        driver.get_log.return_value = [
+            {"timestamp": 1, "level": "INFO", "message": "api_key=TOPSECRET"},
+        ]
+
+        result = capture_session_log(
+            driver,
+            "tests::session",
+            tmp_path,
+            redact=True,
+        )
+        assert result is not None
+        assert "TOPSECRET" not in result.read_text(encoding="utf-8")

@@ -54,11 +54,15 @@ class _FakeConfig:
             ),
             hasplugin=lambda _name: False,
         )
+        self._ini_markers: list[str] = []
 
     def getoption(self, name: str, default=None):
         if name == "app_override":
             return ["unknownField=1"]
         return default
+
+    def addinivalue_line(self, _name: str, value: str) -> None:
+        self._ini_markers.append(value)
 
 
 class _ConfigureConfig:
@@ -72,11 +76,15 @@ class _ConfigureConfig:
             ),
             hasplugin=lambda name: has_xdist if name == "xdist" else False,
         )
+        self._ini_markers: list[str] = []
 
     def getoption(self, name: str, default=None):
         if name == "app_override":
             return self._options.get(name, [])
         return self._options.get(name, default)
+
+    def addinivalue_line(self, _name: str, value: str) -> None:
+        self._ini_markers.append(value)
 
 
 def test_pytest_addoption_registers_appium_url_alias() -> None:
@@ -380,6 +388,147 @@ def test_write_flake_trend_report_tracks_history_and_delta(tmp_path: Path) -> No
     assert len(trend["history"]) == 2
 
 
+def test_prepare_perf_payload_summarizes_metrics() -> None:
+    analytics = {
+        "session_start_ms": [500.0, 700.0],
+        "action_events": [
+            {"nodeid": "tests::one", "action": "tap", "status": "ok", "duration_ms": 50.0},
+            {"nodeid": "tests::one", "action": "type_text", "status": "ok", "duration_ms": 100.0},
+        ],
+        "tests": {
+            "tests::one": {
+                "outcome": "passed",
+                "test_duration_ms": 1200.0,
+                "action_count": 2,
+                "action_total_ms": 150.0,
+                "action_max_ms": 100.0,
+                "action_p95_ms": 97.5,
+            }
+        },
+        "budget_violations": [],
+    }
+
+    payload = pytest_plugin._prepare_perf_payload(analytics)
+
+    assert payload["summary"]["tests_measured"] == 1
+    assert payload["summary"]["action_events_total"] == 2
+    assert payload["summary"]["action_ms_p95"] > 0
+    assert payload["summary"]["test_ms_p95"] == 1200.0
+    assert len(payload["slowest_actions"]) == 2
+
+
+def test_write_perf_trend_report_tracks_history_and_delta(tmp_path: Path) -> None:
+    report_dir = tmp_path / "report"
+    first_payload = {
+        "summary": {
+            "tests_measured": 2,
+            "action_events_total": 8,
+            "budget_violations": 0,
+            "session_start_ms_p95": 1200.0,
+            "action_ms_p95": 400.0,
+            "test_ms_p95": 5000.0,
+        }
+    }
+    second_payload = {
+        "summary": {
+            "tests_measured": 3,
+            "action_events_total": 12,
+            "budget_violations": 1,
+            "session_start_ms_p95": 1400.0,
+            "action_ms_p95": 500.0,
+            "test_ms_p95": 5500.0,
+        }
+    }
+
+    pytest_plugin._write_perf_trend_report(report_dir, first_payload, history_limit=10)
+    trend_path = pytest_plugin._write_perf_trend_report(
+        report_dir,
+        second_payload,
+        history_limit=10,
+    )
+    trend = json.loads(trend_path.read_text(encoding="utf-8"))
+
+    assert trend["trend"]["runs_tracked"] == 2
+    assert trend["trend"]["latest_summary"]["budget_violations"] == 1
+    assert trend["trend"]["delta_from_previous"]["action_ms_p95"] == 100.0
+
+
+def test_merge_xdist_perf_reports_writes_merged_summary(tmp_path: Path) -> None:
+    report_dir = tmp_path / "report"
+    worker_a = report_dir / "workers" / "gw0"
+    worker_b = report_dir / "workers" / "gw1"
+    worker_a.mkdir(parents=True)
+    worker_b.mkdir(parents=True)
+
+    (worker_a / "perf-summary.json").write_text(
+        json.dumps(
+            {
+                "summary": {},
+                "session_start_ms": [500.0],
+                "action_events": [
+                    {
+                        "nodeid": "tests::a",
+                        "action": "tap",
+                        "status": "ok",
+                        "duration_ms": 60.0,
+                    }
+                ],
+                "tests": [
+                    {
+                        "nodeid": "tests::a",
+                        "outcome": "passed",
+                        "test_duration_ms": 1000.0,
+                        "action_count": 1,
+                        "action_total_ms": 60.0,
+                        "action_max_ms": 60.0,
+                        "action_p95_ms": 60.0,
+                    }
+                ],
+                "budget_violations": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (worker_b / "perf-summary.json").write_text(
+        json.dumps(
+            {
+                "summary": {},
+                "session_start_ms": [700.0],
+                "action_events": [
+                    {
+                        "nodeid": "tests::b",
+                        "action": "type_text",
+                        "status": "ok",
+                        "duration_ms": 90.0,
+                    }
+                ],
+                "tests": [
+                    {
+                        "nodeid": "tests::b",
+                        "outcome": "failed",
+                        "test_duration_ms": 1300.0,
+                        "action_count": 1,
+                        "action_total_ms": 90.0,
+                        "action_max_ms": 90.0,
+                        "action_p95_ms": 90.0,
+                    }
+                ],
+                "budget_violations": [
+                    {"kind": "action_budget", "nodeid": "tests::b"}
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    merged_path = pytest_plugin._merge_xdist_perf_reports(report_dir)
+    assert merged_path == report_dir / "perf-summary.json"
+    payload = json.loads((report_dir / "perf-summary.json").read_text(encoding="utf-8"))
+    assert payload["summary"]["tests_measured"] == 2
+    assert payload["summary"]["action_events_total"] == 2
+    assert payload["summary"]["budget_violations"] == 1
+
+
 def test_warn_xdist_port_collisions_logs_warning(caplog) -> None:
     config = SimpleNamespace(workerinput={"workerid": "gw0"}, stash={})
     settings = SimpleNamespace(platform="android")
@@ -445,10 +594,48 @@ def test_pytest_sessionfinish_merges_xdist_reports_on_controller(tmp_path: Path)
         ),
         encoding="utf-8",
     )
+    (worker_dir / "perf-summary.json").write_text(
+        json.dumps(
+            {
+                "summary": {
+                    "tests_measured": 1,
+                    "action_events_total": 1,
+                    "budget_violations": 0,
+                    "session_start_ms_p95": 900.0,
+                    "action_ms_p95": 120.0,
+                    "test_ms_p95": 1500.0,
+                },
+                "session_start_ms": [900.0],
+                "action_events": [
+                    {
+                        "nodeid": "tests::test_a",
+                        "action": "tap",
+                        "status": "ok",
+                        "duration_ms": 120.0,
+                    }
+                ],
+                "tests": [
+                    {
+                        "nodeid": "tests::test_a",
+                        "outcome": "passed",
+                        "test_duration_ms": 1500.0,
+                        "action_count": 1,
+                        "action_total_ms": 120.0,
+                        "action_max_ms": 120.0,
+                        "action_p95_ms": 120.0,
+                    }
+                ],
+                "slowest_actions": [],
+                "budget_violations": [],
+            }
+        ),
+        encoding="utf-8",
+    )
 
     settings = pytest_plugin.AppiumPytestKitSettings(
         reporting_enabled=True,
         report_dir=report_dir,
+        perf_enabled=True,
     )
     config = _ConfigureConfig(workerinput=None, has_xdist=True)
     config.stash[pytest_plugin.SETTINGS_KEY] = settings
@@ -465,3 +652,56 @@ def test_pytest_sessionfinish_merges_xdist_reports_on_controller(tmp_path: Path)
     assert merged_flake["summary"]["flaky_tests"] == 1
     merged_trend = json.loads((report_dir / "flake-trend.json").read_text(encoding="utf-8"))
     assert merged_trend["trend"]["runs_tracked"] == 1
+    merged_perf = json.loads((report_dir / "perf-summary.json").read_text(encoding="utf-8"))
+    assert merged_perf["summary"]["tests_measured"] == 1
+    perf_trend = json.loads((report_dir / "perf-trend.json").read_text(encoding="utf-8"))
+    assert perf_trend["trend"]["runs_tracked"] == 1
+
+
+def test_collection_modifyitems_skips_quarantine_when_mode_is_skip() -> None:
+    class _Item:
+        def __init__(self, has_quarantine: bool) -> None:
+            self._has_quarantine = has_quarantine
+            self.applied: list = []
+
+        def get_closest_marker(self, name: str):
+            if name == "quarantine" and self._has_quarantine:
+                return object()
+            return None
+
+        def add_marker(self, marker) -> None:
+            self.applied.append(marker)
+
+    config = _ConfigureConfig()
+    config.stash[pytest_plugin.SETTINGS_KEY] = pytest_plugin.AppiumPytestKitSettings(
+        quarantine_mode="skip"
+    )
+    quarantined = _Item(has_quarantine=True)
+    regular = _Item(has_quarantine=False)
+
+    pytest_plugin.pytest_collection_modifyitems(config, [quarantined, regular])  # type: ignore[arg-type]
+
+    assert quarantined.applied, "quarantined item should receive skip marker"
+    assert regular.applied == []
+
+
+def test_collection_modifyitems_keeps_quarantine_when_mode_is_run() -> None:
+    class _Item:
+        def __init__(self) -> None:
+            self.applied: list = []
+
+        def get_closest_marker(self, _name: str):
+            return object()
+
+        def add_marker(self, marker) -> None:
+            self.applied.append(marker)
+
+    config = _ConfigureConfig()
+    config.stash[pytest_plugin.SETTINGS_KEY] = pytest_plugin.AppiumPytestKitSettings(
+        quarantine_mode="run"
+    )
+    item = _Item()
+
+    pytest_plugin.pytest_collection_modifyitems(config, [item])  # type: ignore[arg-type]
+
+    assert item.applied == []

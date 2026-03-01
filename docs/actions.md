@@ -549,6 +549,32 @@ Send app to background for the given number of seconds and return it to foregrou
 actions.background_app(2)
 ```
 
+### `clear_app_data(app_id=None)`
+
+Android-only helper that clears app user data with `pm clear`.
+If `app_id` is omitted, it uses `appPackage` from capabilities.
+
+```python
+actions.clear_app_data("com.example.myapp")
+```
+
+### `reset_app_permissions()`
+
+Android-only helper that resets runtime permissions with `pm reset-permissions`.
+
+```python
+actions.reset_app_permissions()
+```
+
+### `reinstall_app(*, app_id=None, app_path=None, activate_after_install=True)`
+
+Reinstalls the app by calling `remove_app` + `install_app`, then optionally
+activates it.
+
+```python
+actions.reinstall_app(app_id="com.example.myapp", app_path="/tmp/build.apk")
+```
+
 ### `open_deep_link(url, *, app_id=None)`
 
 Open a deep link via Appium's mobile command.
