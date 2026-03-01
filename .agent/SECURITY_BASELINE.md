@@ -7,6 +7,7 @@ Minimum security controls for this repository.
 - Never commit `.env` with real secrets.
 - Use repository/environment secrets for CI only.
 - Rotate compromised tokens immediately.
+- Treat tokens pasted into chat/logs as compromised and rotate immediately.
 - Treat PyPI and GitHub release credentials as high-impact assets.
 
 ## Artifact Safety

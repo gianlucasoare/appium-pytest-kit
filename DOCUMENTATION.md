@@ -16,6 +16,7 @@
 | Look up action methods | [Actions reference →](docs/actions.md) |
 | Choose a session mode | [Session modes →](docs/session-modes.md) |
 | Set up device targeting | [Device resolution →](docs/device-resolution.md) |
+| Learn API testing step by step | [API testing →](docs/api-testing.md) |
 | Configure screenshots/video | [Diagnostics →](docs/diagnostics.md) |
 | Handle errors in tests | [Errors →](docs/errors.md) |
 | Fix a problem | [Troubleshooting →](docs/troubleshooting.md) |
@@ -32,6 +33,7 @@ If you're brand new, follow these steps in order:
 4. **Run the smoke test** — `pytest tests/android/test_smoke.py -v`
 5. **[Build your first page object](docs/page-objects.md)** — `pages/login_page.py`
 6. **[Write your first real test](docs/conftest-guide.md)** — `conftest.py` + test file
+7. **[Add API endpoint tests](docs/api-testing.md)** — backend checks + hybrid API/UI flows
 
 ---
 

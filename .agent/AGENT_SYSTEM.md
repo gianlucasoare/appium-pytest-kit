@@ -19,7 +19,7 @@ Quick navigation: see [`INDEX.md`](INDEX.md).
 - `playbooks/`: incident and improvement playbooks.
 - `backlog/`: suggested future capabilities.
 - Root docs: `commands.md`, `OWNERS.md`, `RISK_REGISTER.md`, `METRICS.md`,
-  `CHANGE_PROTOCOL.md`, `SECURITY_BASELINE.md`, `ROADMAP.md`.
+  `CHANGE_PROTOCOL.md`, `SECURITY_BASELINE.md`, `RULES.md`, `ROADMAP.md`.
 
 ## How To Use
 

@@ -28,6 +28,7 @@ appium-pytest-kit-init --framework --root my-project
 | **Fail-fast** | `--app-fail-fast` stops the suite after retries are exhausted, not before |
 | **Explicit waits** | `WaitTimeoutError` with structured `.locator` and `.timeout` context |
 | **High-level actions** | tap, type, swipe, scroll, assertions — all wait-safe |
+| **API endpoint checks** | Lightweight `ApiClient` for backend assertions in the same pytest run |
 | **App reset primitives** | clear app data, reset permissions, reinstall app helpers in `actions` |
 | **Page + flow objects** | Scaffold generates `pages/` and `flows/` with base classes ready to extend |
 | **Extension hooks** | Override settings, inject capabilities, run code after driver creation |
@@ -165,6 +166,28 @@ def test_login(actions):
 ```bash
 pytest -m integration -v
 ```
+
+---
+
+## API endpoint tests
+
+Use the built-in HTTP helper to validate backend endpoints from the same suite:
+
+```python
+from appium_pytest_kit import ApiClient
+
+def test_health_endpoint():
+    api = ApiClient("http://127.0.0.1:8000")
+    response = api.get("/health", expected_status=200)
+    assert response.json()["ok"] is True
+```
+
+When you scaffold with `--framework`, the generated project includes:
+- `api/client.py` (shared `get_api_client()` factory)
+- `tests/api/test_health.py` (starter API test)
+- `api_client` fixture in `conftest.py`
+
+See [docs/api-testing.md](docs/api-testing.md) for full usage and hybrid API + mobile patterns.
 
 ---
 
@@ -449,8 +472,9 @@ from appium_pytest_kit import (
     AppiumPytestKitSettings,
     AppiumPytestKitError,
     ConfigurationError, DeviceResolutionError, LaunchValidationError,
-    WaitTimeoutError, ActionError, DriverCreationError,
+    WaitTimeoutError, ActionError, DriverCreationError, ApiRequestError,
     DeviceInfo, DriverConfig, MobileActions, Waiter,
+    ApiClient, ApiResponse,
     Locator,           # type alias: tuple[str, str]
     build_driver_config, create_driver, load_settings, apply_cli_overrides,
 )
@@ -530,6 +554,7 @@ python -m pytest --collect-only examples/basic/tests -q
 | Built-in fixtures | [docs/fixtures.md](docs/fixtures.md) |
 | Page objects guide | [docs/page-objects.md](docs/page-objects.md) |
 | conftest.py guide | [docs/conftest-guide.md](docs/conftest-guide.md) |
+| API testing tutorial (step by step) | [docs/api-testing.md](docs/api-testing.md) |
 | Waits reference | [docs/waits.md](docs/waits.md) |
 | Actions reference | [docs/actions.md](docs/actions.md) |
 | Session modes | [docs/session-modes.md](docs/session-modes.md) |

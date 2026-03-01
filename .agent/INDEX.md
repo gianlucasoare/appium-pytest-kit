@@ -11,6 +11,7 @@ Central navigation for the local agent operating system.
 - [Metrics](METRICS.md)
 - [Change Protocol](CHANGE_PROTOCOL.md)
 - [Security Baseline](SECURITY_BASELINE.md)
+- [Operational Rules](RULES.md)
 - [Roadmap](ROADMAP.md)
 
 ## Skills
@@ -22,6 +23,7 @@ Central navigation for the local agent operating system.
 - [AI Assisted Engineering](skills/ai-assisted-engineering/SKILL.md)
 - [Release And CI](skills/release-and-ci/SKILL.md)
 - [Quality Gates](skills/quality-gates/SKILL.md)
+- [Clean Code](skills/clean-code/SKILL.md)
 
 ## Workflows
 

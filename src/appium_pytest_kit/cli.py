@@ -126,6 +126,7 @@ _CONFTEST_PY = """\
 \"\"\"Session-level fixtures for the test suite.\"\"\"
 
 import pytest
+from appium_pytest_kit.api import ApiClient
 from appium_pytest_kit.settings import AppiumPytestKitSettings
 
 
@@ -133,6 +134,14 @@ from appium_pytest_kit.settings import AppiumPytestKitSettings
 def app_settings(settings: AppiumPytestKitSettings) -> AppiumPytestKitSettings:
     \"\"\"Expose settings to tests under a shorter alias.\"\"\"
     return settings
+
+
+@pytest.fixture(scope="session")
+def api_client() -> ApiClient:
+    \"\"\"Provide a shared API client for endpoint tests.\"\"\"
+    from api.client import get_api_client
+
+    return get_api_client()
 """
 
 _PYTEST_INI = """\
@@ -144,6 +153,7 @@ markers =
     regression: full regression suite
     android: android-only tests
     ios: ios-only tests
+    api: backend API endpoint tests
 """
 
 _BASE_PAGE = """\
@@ -243,6 +253,39 @@ import pytest
 def test_app_launches(driver) -> None:
     \"\"\"Verify the app opens and a session can be established.\"\"\"
     assert driver is not None, "Driver should be created"
+"""
+
+_API_CLIENT = """\
+\"\"\"API client factory used by tests/api/*.py.\"\"\"
+
+import os
+
+from appium_pytest_kit.api import ApiClient
+
+
+def get_api_client() -> ApiClient:
+    \"\"\"Create an ApiClient from environment variables.\"\"\"
+    base_url = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
+    token = os.getenv("API_TOKEN")
+
+    headers: dict[str, str] = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    return ApiClient(base_url=base_url, default_headers=headers, timeout=20.0)
+"""
+
+_API_HEALTH_TEST = """\
+\"\"\"Starter API test — adapt endpoint and assertions to your backend.\"\"\"
+
+import pytest
+
+
+@pytest.mark.api
+def test_health_endpoint(api_client) -> None:
+    \"\"\"Sanity-check a health endpoint and expect 2xx response.\"\"\"
+    response = api_client.get("/health", expected_status=range(200, 300))
+    assert response.status_code in range(200, 300)
 """
 
 _GITIGNORE_EXTRA = """\
@@ -480,8 +523,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--framework",
         action="store_true",
         help=(
-            "Scaffold a full project structure: pages/, flows/, tests/android/, "
-            "tests/ios/, data/devices.yaml, conftest.py, pytest.ini"
+            "Scaffold a full project structure: pages/, flows/, api/, tests/android/, "
+            "tests/ios/, tests/api/, data/devices.yaml, conftest.py, pytest.ini"
         ),
     )
     parser.add_argument(
@@ -552,7 +595,11 @@ def scaffold_framework(root: Path, *, force: bool = False) -> list[str]:
     _write("flows/__init__.py", "")
     _write("flows/base_flow.py", _BASE_FLOW)
     _write("flows/example_flow.py", _EXAMPLE_FLOW)
+    _write("api/__init__.py", "")
+    _write("api/client.py", _API_CLIENT)
     _write("tests/__init__.py", "")
+    _write("tests/api/__init__.py", "")
+    _write("tests/api/test_health.py", _API_HEALTH_TEST)
     _write("tests/android/__init__.py", "")
     _write("tests/android/test_smoke.py", _SMOKE_TEST)
     _write("tests/ios/__init__.py", "")

@@ -62,3 +62,30 @@ class ActionError(AppiumPytestKitError):
 
 class DriverCreationError(AppiumPytestKitError):
     """Raised when an Appium session cannot be created."""
+
+
+class ApiRequestError(AppiumPytestKitError):
+    """Raised when an API request fails or returns an unexpected result."""
+
+    def __init__(
+        self,
+        message: str = "API request failed",
+        *,
+        method: str | None = None,
+        url: str | None = None,
+        status_code: int | None = None,
+    ) -> None:
+        self.method = method
+        self.url = url
+        self.status_code = status_code
+
+        context: list[str] = []
+        if method:
+            context.append(method.upper())
+        if url:
+            context.append(url)
+        if status_code is not None:
+            context.append(f"status={status_code}")
+
+        detail = f"[{' '.join(context)}] {message}" if context else message
+        super().__init__(detail)

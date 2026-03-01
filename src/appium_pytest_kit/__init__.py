@@ -3,9 +3,11 @@
 from appium_pytest_kit._internal.device_resolver import DeviceInfo
 from appium_pytest_kit._version import __version__
 from appium_pytest_kit.actions import MobileActions
+from appium_pytest_kit.api import ApiClient, ApiResponse
 from appium_pytest_kit.driver import DriverConfig, build_driver_config, create_driver
 from appium_pytest_kit.errors import (
     ActionError,
+    ApiRequestError,
     AppiumPytestKitError,
     ConfigurationError,
     DeviceResolutionError,
@@ -18,6 +20,9 @@ from appium_pytest_kit.waits import Locator, Waiter
 
 __all__ = [
     "ActionError",
+    "ApiClient",
+    "ApiRequestError",
+    "ApiResponse",
     "AppiumPytestKitError",
     "AppiumPytestKitSettings",
     "ConfigurationError",

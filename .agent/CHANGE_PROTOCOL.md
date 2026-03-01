@@ -16,6 +16,14 @@ Policy for safe and predictable framework changes.
 4. If architecture-impacting, add/update ADR.
 5. Validate all quality gates before merge.
 
+## Additional Enforcement Rules
+
+- Any release-intended change must pass xdist sanity (`pytest -n 2`) in addition
+  to the default unit lane.
+- CI bug fixes must include a regression test whenever feasible.
+- If scaffold output changes, update project-structure and CLI docs in the same
+  change set.
+
 ## Breaking Change Rules
 
 - Must include migration notes in docs/README.

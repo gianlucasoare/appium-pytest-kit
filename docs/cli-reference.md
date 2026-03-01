@@ -19,7 +19,7 @@ appium-pytest-kit-init --path path/to/.env
 # Overwrite an existing .env
 appium-pytest-kit-init --force
 
-# Scaffold a full project structure (pages/, flows/, tests/, devices.yaml, …)
+# Scaffold a full project structure (pages/, flows/, api/, tests/, devices.yaml, …)
 appium-pytest-kit-init --framework
 
 # Scaffold into a named subdirectory

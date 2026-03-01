@@ -14,6 +14,10 @@ my-app-tests/
 ├── conftest.py                 # project-wide fixtures and hook implementations
 ├── pytest.ini                  # pytest options and marker definitions
 │
+├── api/                        # API client helpers (optional)
+│   ├── __init__.py
+│   └── client.py               # shared ApiClient factory for endpoint tests
+│
 ├── pages/                      # page object classes
 │   ├── __init__.py
 │   ├── base_page.py            # common BasePage all pages inherit
@@ -30,6 +34,9 @@ my-app-tests/
 │
 ├── tests/
 │   ├── __init__.py
+│   ├── api/
+│   │   ├── __init__.py
+│   │   └── test_health.py
 │   ├── android/
 │   │   ├── __init__.py
 │   │   ├── test_login.py
@@ -88,6 +95,7 @@ testpaths = tests
 markers =
     smoke: fast smoke-check tests
     regression: full regression suite
+    api: backend API endpoint tests
     android: android-only tests
     ios: ios-only tests
     integration: requires a running Appium server and connected device
@@ -161,12 +169,15 @@ my-app-tests/
 ├── .gitignore
 ├── conftest.py           ← ready to extend
 ├── pytest.ini
+├── api/
+│   └── client.py
 ├── data/devices.yaml     ← edit or remove unused profiles
 ├── pages/
 │   ├── base_page.py      ← keep this as-is
 │   └── example_page.py   ← rename and adapt to your first screen
 ├── flows/
 ├── tests/
+│   ├── api/test_health.py
 │   ├── android/test_smoke.py
 │   └── ios/test_smoke.py
 ```

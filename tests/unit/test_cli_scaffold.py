@@ -12,9 +12,11 @@ class TestScaffoldFramework:
 
         paths = {Path(p).relative_to(tmp_path).as_posix() for p in created}
         assert "data/devices.yaml" in paths
+        assert "api/client.py" in paths
         assert "pages/base_page.py" in paths
         assert "conftest.py" in paths
         assert "pytest.ini" in paths
+        assert "tests/api/test_health.py" in paths
         assert "tests/android/test_smoke.py" in paths
         assert "tests/ios/test_smoke.py" in paths
 
@@ -27,6 +29,11 @@ class TestScaffoldFramework:
         scaffold_framework(tmp_path)
         test_file = tmp_path / "tests/android/test_smoke.py"
         # Compile check — raises SyntaxError if broken
+        compile(test_file.read_text(encoding="utf-8"), str(test_file), "exec")
+
+    def test_api_test_is_valid_python(self, tmp_path: Path) -> None:
+        scaffold_framework(tmp_path)
+        test_file = tmp_path / "tests/api/test_health.py"
         compile(test_file.read_text(encoding="utf-8"), str(test_file), "exec")
 
     def test_force_overwrites_existing(self, tmp_path: Path) -> None:

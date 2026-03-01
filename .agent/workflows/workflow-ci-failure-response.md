@@ -11,7 +11,8 @@ Handle CI failures with fast diagnosis and high confidence fixes.
 3. Reproduce locally with equivalent command.
 4. Patch with targeted regression test.
 5. Re-run lane-equivalent checks.
-6. Capture lessons in ADR or playbook if recurring.
+6. For xdist/reporting failures, validate missing-file tolerance and controller vs worker paths.
+7. Capture lessons in ADR or playbook if recurring.
 
 ## Exit Criteria
 

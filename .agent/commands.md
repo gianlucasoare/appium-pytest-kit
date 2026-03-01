@@ -39,6 +39,9 @@ python3 scripts/check_perf_thresholds.py \
 ## Release
 
 ```bash
+python3 -m ruff check .
+python3 -m pytest -q
+python3 -m pytest -q -n 2 -m "not quarantine"
 python3 -m build
 python3 -m twine check dist/*
 git tag vX.Y.Z

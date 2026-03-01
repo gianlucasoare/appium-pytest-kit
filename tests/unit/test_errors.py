@@ -3,6 +3,7 @@
 
 from appium_pytest_kit.errors import (
     ActionError,
+    ApiRequestError,
     ConfigurationError,
     DeviceResolutionError,
     DriverCreationError,
@@ -77,3 +78,18 @@ def test_new_error_classes_are_base_subclass() -> None:
     assert issubclass(LaunchValidationError, AppiumPytestKitError)
     assert issubclass(ConfigurationError, AppiumPytestKitError)
     assert issubclass(DriverCreationError, AppiumPytestKitError)
+    assert issubclass(ApiRequestError, AppiumPytestKitError)
+
+
+def test_api_request_error_with_context() -> None:
+    exc = ApiRequestError(
+        "bad gateway",
+        method="get",
+        url="https://example.test/api",
+        status_code=502,
+    )
+    assert exc.method == "get"
+    assert exc.url == "https://example.test/api"
+    assert exc.status_code == 502
+    assert "GET" in str(exc)
+    assert "status=502" in str(exc)
