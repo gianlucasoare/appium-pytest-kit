@@ -5,6 +5,8 @@
 ```bash
 pip install appium-pytest-kit
 appium-pytest-kit-init --framework --root my-project
+# optional: scaffold + install extras in one step
+appium-pytest-kit-init --framework --root my-project --install-extras all
 ```
 
 **Full documentation:** [DOCUMENTATION.md](./DOCUMENTATION.md) · [docs/](./docs/)

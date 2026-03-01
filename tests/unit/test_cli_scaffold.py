@@ -1,6 +1,10 @@
 """Tests for the --framework scaffold CLI flag."""
 
+import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 from appium_pytest_kit.cli import main, scaffold_framework
 
@@ -70,3 +74,49 @@ class TestMainFrameworkFlag:
         code = main(["--path", str(env_path)])
         assert code == 0
         assert env_path.exists()
+
+    def test_main_framework_install_extras_invokes_pip(self, tmp_path: Path, monkeypatch) -> None:
+        captured: dict[str, object] = {}
+
+        def _fake_run(command, *, check):
+            captured["command"] = command
+            captured["check"] = check
+            return None
+
+        monkeypatch.setattr("appium_pytest_kit.cli.subprocess.run", _fake_run)
+
+        code = main(["--framework", "--root", str(tmp_path), "--install-extras", "all"])
+
+        assert code == 0
+        assert captured["check"] is True
+        assert captured["command"] == [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "appium-pytest-kit[all]",
+        ]
+
+    def test_main_framework_install_extras_invalid_value_exits(self, tmp_path: Path) -> None:
+        with pytest.raises(SystemExit) as exc_info:
+            main(["--framework", "--root", str(tmp_path), "--install-extras", "unknown"])
+        assert exc_info.value.code == 2
+
+    def test_main_install_extras_without_framework_exits(self, tmp_path: Path) -> None:
+        with pytest.raises(SystemExit) as exc_info:
+            main(["--root", str(tmp_path), "--install-extras", "all"])
+        assert exc_info.value.code == 2
+
+    def test_main_framework_install_extras_failure_returns_nonzero(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        def _fake_run(_command, *, check):
+            _ = check
+            raise subprocess.CalledProcessError(returncode=7, cmd="pip install")
+
+        monkeypatch.setattr("appium_pytest_kit.cli.subprocess.run", _fake_run)
+
+        code = main(["--framework", "--root", str(tmp_path), "--install-extras", "all"])
+        assert code == 7

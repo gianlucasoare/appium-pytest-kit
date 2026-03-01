@@ -24,6 +24,9 @@ Central navigation for the local agent operating system.
 - [Release And CI](skills/release-and-ci/SKILL.md)
 - [Quality Gates](skills/quality-gates/SKILL.md)
 - [Clean Code](skills/clean-code/SKILL.md)
+- [Context7](skills/context7/SKILL.md)
+- [Debug](skills/debug/SKILL.md)
+- [Code Review](skills/code-review/SKILL.md)
 
 ## Workflows
 

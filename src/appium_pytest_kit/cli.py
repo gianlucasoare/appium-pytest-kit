@@ -5,6 +5,7 @@ import argparse
 import json
 import re
 import subprocess
+import sys
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -294,6 +295,8 @@ artifacts/
 .env
 """
 
+_ALLOWED_EXTRAS: tuple[str, ...] = ("all", "allure", "dev", "retry", "xdist", "yaml")
+
 
 @dataclass(slots=True)
 class DoctorCheck:
@@ -532,6 +535,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=".",
         help="Root directory for the framework scaffold (default: current directory)",
     )
+    parser.add_argument(
+        "--install-extras",
+        default=None,
+        help=(
+            "Install optional extras after scaffolding (only with --framework). "
+            "Examples: all | yaml,retry,xdist"
+        ),
+    )
     return parser
 
 
@@ -613,11 +624,48 @@ def scaffold_framework(root: Path, *, force: bool = False) -> list[str]:
     return created
 
 
+def _normalize_extras_spec(raw: str) -> str:
+    requested = [chunk.strip().lower() for chunk in raw.split(",") if chunk.strip()]
+    if not requested:
+        msg = (
+            "--install-extras requires a value. "
+            f"Allowed values: {', '.join(_ALLOWED_EXTRAS)}"
+        )
+        raise ValueError(msg)
+
+    invalid = sorted({name for name in requested if name not in _ALLOWED_EXTRAS})
+    if invalid:
+        rendered = ", ".join(repr(name) for name in invalid)
+        msg = (
+            f"--install-extras got unknown extra(s): {rendered}. "
+            f"Allowed values: {', '.join(_ALLOWED_EXTRAS)}"
+        )
+        raise ValueError(msg)
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for name in requested:
+        if name in seen:
+            continue
+        seen.add(name)
+        deduped.append(name)
+    return ",".join(deduped)
+
+
+def install_framework_extras(extras_spec: str) -> None:
+    requirement = f"appium-pytest-kit[{extras_spec}]"
+    command = [sys.executable, "-m", "pip", "install", requirement]
+    subprocess.run(command, check=True)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entry point used by `appium-pytest-kit-init`."""
 
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    if args.install_extras and not args.framework:
+        parser.error("--install-extras can only be used with --framework")
 
     if args.framework:
         root = Path(args.root).resolve()
@@ -628,6 +676,26 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(f"  {path}")
         else:
             print(f"Nothing to scaffold in {root} (use --force to overwrite existing files).")
+
+        if args.install_extras:
+            try:
+                normalized_extras = _normalize_extras_spec(args.install_extras)
+            except ValueError as exc:
+                parser.error(str(exc))
+
+            print(
+                f"\nInstalling optional extras ({normalized_extras}) "
+                "for appium-pytest-kit in the current Python environment..."
+            )
+            try:
+                install_framework_extras(normalized_extras)
+            except subprocess.CalledProcessError as exc:
+                print(
+                    "Failed to install extras via pip. "
+                    f"Command exited with code {exc.returncode}."
+                )
+                return exc.returncode or 1
+            print("Extras installed successfully.")
         return 0
 
     output_path = Path(args.path)

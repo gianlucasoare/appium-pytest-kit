@@ -27,6 +27,9 @@ appium-pytest-kit-init --framework --root my-project
 
 # Overwrite an existing scaffold
 appium-pytest-kit-init --framework --root my-project --force
+
+# Scaffold and install all optional extras in the current environment
+appium-pytest-kit-init --framework --install-extras all
 ```
 
 | Flag | Default | Description |
@@ -35,6 +38,10 @@ appium-pytest-kit-init --framework --root my-project --force
 | `--framework` | off | Scaffold a full project structure |
 | `--root DIR` | `.` | Root directory for the framework scaffold |
 | `--force` | off | Overwrite files that already exist |
+| `--install-extras LIST` | off | Install extras after scaffold (only with `--framework`) |
+
+`--install-extras` accepts comma-separated values from:
+`all`, `yaml`, `allure`, `retry`, `xdist`, `dev`.
 
 ---
 
