@@ -24,7 +24,10 @@ htmlcov/
 .DS_Store
 .idea/
 .vscode/
-.claude/
+# Claude Code — ignore local/session files, track project config
+.claude/settings.local.json
+.claude/worktrees/
+.claude/plans/
 
 # Runtime artifacts
 artifacts/
