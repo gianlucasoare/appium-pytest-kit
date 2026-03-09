@@ -1,0 +1,4 @@
+interface:
+  display_name: "Appium Kit Debug"
+  short_description: "Debug flaky or failing test lanes"
+  default_prompt: "Use $appium-kit-debug to diagnose a failing or flaky test lane in this repo."

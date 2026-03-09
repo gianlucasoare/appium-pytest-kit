@@ -1,0 +1,4 @@
+interface:
+  display_name: "Appium Kit Code Reviewer"
+  short_description: "Review changes for regressions and risk"
+  default_prompt: "Use $appium-kit-code-reviewer to review a change for bugs, regressions, and test gaps."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Appium Kit Delivery"
+  short_description: "Plan and ship framework changes safely"
+  default_prompt: "Use $appium-kit-delivery to plan and implement a safe framework change in this repo."

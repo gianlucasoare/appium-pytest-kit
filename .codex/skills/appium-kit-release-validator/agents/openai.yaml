@@ -1,0 +1,4 @@
+interface:
+  display_name: "Appium Kit Release Validator"
+  short_description: "Run the release preflight sequence"
+  default_prompt: "Use $appium-kit-release-validator to run the release preflight sequence for this package."

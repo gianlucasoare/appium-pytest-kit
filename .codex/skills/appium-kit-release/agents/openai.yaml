@@ -1,0 +1,4 @@
+interface:
+  display_name: "Appium Kit Release"
+  short_description: "Prepare release gates and package preflight"
+  default_prompt: "Use $appium-kit-release to prepare or validate a release for this package."

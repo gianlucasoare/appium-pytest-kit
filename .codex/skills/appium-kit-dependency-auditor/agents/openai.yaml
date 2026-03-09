@@ -1,0 +1,4 @@
+interface:
+  display_name: "Appium Kit Dependency Auditor"
+  short_description: "Audit dependency health and extras"
+  default_prompt: "Use $appium-kit-dependency-auditor to audit dependency declarations and extras in this repo."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Appium Kit Doc Sync"
+  short_description: "Keep docs aligned with framework code"
+  default_prompt: "Use $appium-kit-doc-sync to audit and update docs so they match the current framework code."

@@ -83,3 +83,10 @@ If any step fails, release is blocked. After release: verify PyPI version, GitHu
 - **Security**: never store tokens in source files/docs/issues, use env vars for secrets, rotate exposed tokens immediately
 - **Docs ship with behavior**: any new fixture/helper/CLI behavior requires README update + docs/ update
 - **Publish verification**: verify PyPI version, GitHub release notes, install + import smoke after every release
+
+## Guidance Sync Policy
+
+- `CLAUDE.md` and `AGENTS.md` should stay semantically aligned on repo-wide policy, commands, release gates, and architectural constraints.
+- Update both root guidance files when a shared rule changes, even if only one assistant currently depends on the wording.
+- Keep assistant-specific discovery details separate: Claude skill and rule routing belongs in `.claude/`, while Codex skill routing belongs in `AGENTS.md` and `.codex/skills/`.
+- If the two systems ever disagree, treat that as maintenance drift and reconcile the rule before relying on it.

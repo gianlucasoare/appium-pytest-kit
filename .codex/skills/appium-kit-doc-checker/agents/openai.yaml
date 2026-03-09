@@ -1,0 +1,4 @@
+interface:
+  display_name: "Appium Kit Doc Checker"
+  short_description: "Check docs against public APIs"
+  default_prompt: "Use $appium-kit-doc-checker to compare the docs against the current public APIs in this repo."

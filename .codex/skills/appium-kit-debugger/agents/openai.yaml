@@ -1,0 +1,4 @@
+interface:
+  display_name: "Appium Kit Debugger"
+  short_description: "Reproduce and isolate framework failures"
+  default_prompt: "Use $appium-kit-debugger to reproduce, isolate, and fix a framework failure in this repo."

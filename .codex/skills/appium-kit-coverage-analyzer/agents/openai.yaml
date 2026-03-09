@@ -1,0 +1,4 @@
+interface:
+  display_name: "Appium Kit Coverage Analyzer"
+  short_description: "Find high-risk coverage gaps"
+  default_prompt: "Use $appium-kit-coverage-analyzer to find important coverage gaps in this repo."

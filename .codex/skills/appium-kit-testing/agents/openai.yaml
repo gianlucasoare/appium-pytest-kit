@@ -1,0 +1,4 @@
+interface:
+  display_name: "Appium Kit Testing"
+  short_description: "Design reliable tests and fixtures"
+  default_prompt: "Use $appium-kit-testing to design or extend reliable tests and fixtures in this repo."

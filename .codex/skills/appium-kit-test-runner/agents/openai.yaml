@@ -1,0 +1,4 @@
+interface:
+  display_name: "Appium Kit Test Runner"
+  short_description: "Run lanes and summarize failures"
+  default_prompt: "Use $appium-kit-test-runner to run test lanes and summarize failures in this repo."
