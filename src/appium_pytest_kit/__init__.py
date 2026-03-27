@@ -15,7 +15,15 @@ from appium_pytest_kit.errors import (
     LaunchValidationError,
     WaitTimeoutError,
 )
+from appium_pytest_kit.parametrize import cross_platform, from_file, load_test_data
 from appium_pytest_kit.settings import AppiumPytestKitSettings, apply_cli_overrides, load_settings
+from appium_pytest_kit.visual import (
+    BaselineManager,
+    ScreenshotDiff,
+    VisualRegressionError,
+    assert_screenshot_match,
+    compare_screenshots,
+)
 from appium_pytest_kit.waits import Locator, Waiter
 
 __all__ = [
@@ -25,6 +33,7 @@ __all__ = [
     "ApiResponse",
     "AppiumPytestKitError",
     "AppiumPytestKitSettings",
+    "BaselineManager",
     "ConfigurationError",
     "DeviceInfo",
     "DeviceResolutionError",
@@ -33,11 +42,18 @@ __all__ = [
     "LaunchValidationError",
     "Locator",
     "MobileActions",
+    "ScreenshotDiff",
+    "VisualRegressionError",
     "WaitTimeoutError",
     "Waiter",
     "__version__",
     "apply_cli_overrides",
+    "assert_screenshot_match",
     "build_driver_config",
+    "compare_screenshots",
     "create_driver",
+    "cross_platform",
+    "from_file",
     "load_settings",
+    "load_test_data",
 ]

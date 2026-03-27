@@ -46,11 +46,15 @@ retry = [
 xdist = [
   "pytest-xdist>=3.6.0",
 ]
+visual = [
+  "Pillow>=10.0.0",
+]
 all = [
   "PyYAML>=6.0",
   "allure-pytest>=2.13.0",
   "pytest-retry>=0.6.0",
   "pytest-xdist>=3.6.0",
+  "Pillow>=10.0.0",
 ]
 
 [project.scripts]

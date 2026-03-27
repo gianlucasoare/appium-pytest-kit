@@ -55,6 +55,8 @@ nav:
       - Actions Reference: actions.md
       - Waits Reference: waits.md
       - API Testing: api-testing.md
+      - Data-Driven Testing: data-driven-testing.md
+      - Visual Regression: visual-regression.md
   - Advanced:
       - Device Resolution: device-resolution.md
       - Session Modes: session-modes.md
