@@ -359,7 +359,7 @@ def load_settings(*, env_file: str | Path | None = None) -> AppiumPytestKitSetti
     if env_file is None:
         settings = AppiumPytestKitSettings()
     else:
-        settings = AppiumPytestKitSettings(_env_file=env_file)
+        settings = AppiumPytestKitSettings(_env_file=env_file)  # type: ignore[call-arg]
 
     if settings.strict_config:
         unknown_env_keys = _unknown_setting_env_keys(env_file=env_path)

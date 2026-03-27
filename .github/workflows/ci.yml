@@ -59,11 +59,14 @@ jobs:
       - name: Lint
         run: ruff check .
 
-      - name: Unit tests
+      - name: Type check
+        run: mypy src/appium_pytest_kit/
+
+      - name: Unit tests with coverage
         env:
           APP_REPORTING_ENABLED: "true"
           APP_REPORT_DIR: artifacts/appium-pytest-kit
-        run: pytest -q -m "not quarantine"
+        run: pytest -q -m "not quarantine" --cov --cov-report=term-missing
 
       - name: Flake quality gate
         if: matrix.python-version == '3.12'

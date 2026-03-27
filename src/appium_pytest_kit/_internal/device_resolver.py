@@ -66,7 +66,7 @@ class DeviceResolver:
             )
             return info
 
-        info = self._auto_detect()
+        info = self._auto_detect()  # type: ignore[assignment]
         if info:
             logger.info(
                 "device:tier-3 (auto-detect)  name=%r  udid=%s  version=%s",

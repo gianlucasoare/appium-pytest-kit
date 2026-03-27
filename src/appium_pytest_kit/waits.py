@@ -71,7 +71,7 @@ class Waiter:
         t = self._resolve_timeout(timeout)
         logger.debug("wait:presence  %s  timeout=%.1fs", locator, t)
         return self.until(
-            ec.presence_of_element_located(locator),
+            ec.presence_of_element_located(locator),  # type: ignore[arg-type]
             timeout=t,
             message=f"Element not present: {locator}",
             locator=locator,
@@ -83,7 +83,7 @@ class Waiter:
         t = self._resolve_timeout(timeout)
         logger.debug("wait:visibility  %s  timeout=%.1fs", locator, t)
         return self.until(
-            ec.visibility_of_element_located(locator),
+            ec.visibility_of_element_located(locator),  # type: ignore[arg-type]
             timeout=t,
             message=f"Element not visible: {locator}",
             locator=locator,
@@ -95,7 +95,7 @@ class Waiter:
         t = self._resolve_timeout(timeout)
         logger.debug("wait:clickable  %s  timeout=%.1fs", locator, t)
         return self.until(
-            ec.element_to_be_clickable(locator),
+            ec.element_to_be_clickable(locator),  # type: ignore[arg-type]
             timeout=t,
             message=f"Element not clickable: {locator}",
             locator=locator,
@@ -106,12 +106,12 @@ class Waiter:
 
         t = self._resolve_timeout(timeout)
         logger.debug("wait:invisibility  %s  timeout=%.1fs", locator, t)
-        return self.until(
-            ec.invisibility_of_element_located(locator),
+        return bool(self.until(
+            ec.invisibility_of_element_located(locator),  # type: ignore[arg-type]
             timeout=t,
             message=f"Element still visible: {locator}",
             locator=locator,
-        )
+        ))
 
     def for_text_contains(
         self,
@@ -125,7 +125,7 @@ class Waiter:
         t = self._resolve_timeout(timeout)
         logger.debug("wait:text_contains  %s  text=%r  timeout=%.1fs", locator, text, t)
         return self.until(
-            ec.text_to_be_present_in_element(locator, text),
+            ec.text_to_be_present_in_element(locator, text),  # type: ignore[arg-type]
             timeout=t,
             message=f"Text {text!r} not found in element: {locator}",
             locator=locator,
@@ -212,11 +212,11 @@ class Waiter:
                     pass
             return True
 
-        return self.until(
+        return bool(self.until(
             _all_gone,
             timeout=t,
             message=f"Some elements still visible: {locators_list!r}",
-        )
+        ))
 
     def for_context_contains(
         self,
@@ -241,11 +241,11 @@ class Waiter:
                 pass
             return False
 
-        return self.until(
+        return str(self.until(
             _cond,
             timeout=t,
             message=f"No context containing {substring!r} became available",
-        )
+        ))
 
     def for_android_activity(
         self,
@@ -268,11 +268,11 @@ class Waiter:
             except Exception:
                 return False
 
-        return self.until(
+        return str(self.until(
             _cond,
             timeout=t,
             message=f"Activity containing {partial_name!r} did not appear",
-        )
+        ))
 
     def for_any_visible(self, locators: Locators, *, timeout: float | None = None):
         """Wait until any one of the locators is visible and return it."""

@@ -8,6 +8,7 @@ import re
 import shutil
 import time
 from collections import Counter
+from collections.abc import Generator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -778,12 +779,14 @@ def _merge_xdist_flake_reports(report_dir: Path) -> Path | None:
             if not nodeid:
                 continue
             current = merged_tests.get(nodeid)
+            c_failures = int(entry.get("failures", 0))
             candidate = {
-                "failures": int(entry.get("failures", 0)),
+                "failures": c_failures,
                 "max_retries": int(entry.get("max_retries", 0)),
                 "final_outcome": str(entry.get("final_outcome", "unknown")),
             }
-            if current is None or candidate["failures"] >= int(current.get("failures", 0)):
+            current_failures = int(current["failures"]) if current is not None else -1
+            if current is None or c_failures >= current_failures:
                 merged_tests[nodeid] = candidate
 
         flaky_tests.update(str(item) for item in payload.get("flaky_tests", []))
@@ -1214,7 +1217,7 @@ def device_info(settings) -> DeviceInfo | None:
 
 
 @pytest.fixture(scope="session")
-def appium_server(settings) -> AppiumServerInfo:
+def appium_server(settings) -> Generator[AppiumServerInfo]:
     """Resolved Appium server fixture with optional local lifecycle management."""
 
     manager = AppiumServerManager(settings)

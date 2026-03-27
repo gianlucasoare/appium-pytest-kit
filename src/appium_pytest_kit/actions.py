@@ -713,7 +713,8 @@ class MobileActions:
 
         try:
             element = self._waiter.for_visibility(locator, timeout=timeout)
-            return element.get_attribute(attr)
+            value = element.get_attribute(attr)
+            return str(value) if value is not None else None
         except WebDriverException as exc:
             raise ActionError(
                 f"Attribute read failed for locator: {locator}", locator=locator, action="attribute"
@@ -1081,7 +1082,7 @@ class MobileActions:
             contexts = self._driver.contexts
             for ctx in contexts:
                 if "WEBVIEW" in ctx:
-                    return ctx
+                    return str(ctx)
         except WebDriverException as exc:
             raise ActionError(
                 "get_webview_context_name failed",

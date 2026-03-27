@@ -130,7 +130,11 @@ def _run_capture_command(command: list[str], *, timeout: float = 8.0) -> str | N
     except (FileNotFoundError, PermissionError):
         return None
     except subprocess.TimeoutExpired as exc:
-        partial = (exc.stdout or "") + ("\n" + exc.stderr if exc.stderr else "")
+        raw_out = exc.stdout
+        stdout = raw_out if isinstance(raw_out, str) else (raw_out or b"").decode(errors="replace")
+        raw_err = exc.stderr
+        stderr = raw_err if isinstance(raw_err, str) else (raw_err or b"").decode(errors="replace")
+        partial = stdout + ("\n" + stderr if stderr else "")
         payload = partial.strip()
         return payload or None
 

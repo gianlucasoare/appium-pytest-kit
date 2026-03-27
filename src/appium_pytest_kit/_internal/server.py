@@ -30,7 +30,7 @@ class AppiumServerManager:
 
     def __init__(self, settings: AppiumPytestKitSettings) -> None:
         self._settings = settings
-        self._service = None
+        self._service: object | None = None
         self._worker_id = os.getenv("PYTEST_XDIST_WORKER") or ""
         self._worker_index = self._parse_worker_index(self._worker_id)
 
@@ -146,5 +146,5 @@ class AppiumServerManager:
             return
         if self._flag(self._service, "is_running"):
             logger.info("server:stopping")
-            self._service.stop()
+            self._service.stop()  # type: ignore[attr-defined]
         self._service = None
