@@ -29,6 +29,9 @@ htmlcov/
 .claude/worktrees/
 .claude/plans/
 
+# mkdocs build output
+site/
+
 # Runtime artifacts
 artifacts/
 reports/

@@ -1,0 +1,84 @@
+site_name: appium-pytest-kit
+site_url: https://gianlucasoare.github.io/appium-pytest-kit/
+site_description: Reusable Appium 2.x + pytest mobile test framework
+repo_url: https://github.com/gianlucasoare/appium-pytest-kit
+repo_name: gianlucasoare/appium-pytest-kit
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: installation.md
+      - Configuration: configuration.md
+      - Project Structure: project-structure.md
+      - CLI Reference: cli-reference.md
+  - Core Usage:
+      - Fixtures: fixtures.md
+      - Page Objects: page-objects.md
+      - conftest Guide: conftest-guide.md
+      - Actions Reference: actions.md
+      - Waits Reference: waits.md
+      - API Testing: api-testing.md
+  - Advanced:
+      - Device Resolution: device-resolution.md
+      - Session Modes: session-modes.md
+      - Diagnostics: diagnostics.md
+      - Performance: performance.md
+      - Error Reference: errors.md
+      - Troubleshooting: troubleshooting.md
+  - Project:
+      - Roadmap: ROADMAP.md
+      - Contributing: contributing.md
+      - Decisions:
+          - Engineering Governance: decisions/ADR-0001-engineering-governance.md
+          - Quality Gates Policy: decisions/ADR-0002-quality-gates-policy.md
+          - Test Strategy: decisions/ADR-0003-test-strategy.md
+      - Governance:
+          - Metrics: governance/METRICS.md
+          - Owners: governance/OWNERS.md
+          - Risk Register: governance/RISK_REGISTER.md
+          - Security Baseline: governance/SECURITY_BASELINE.md
+      - Playbooks:
+          - Framework Audit: playbooks/framework-audit-checklist.md
+          - Appium Server Outage: playbooks/outage-appium-server.md
+          - Device Farm Outage: playbooks/outage-device-farm.md
+          - PyPI Release Outage: playbooks/outage-pypi-release.md
+          - Performance Budget Rollout: playbooks/performance-budget-rollout.md
+      - Reference:
+          - Recommended Capabilities: backlog/recommended-capabilities.md
