@@ -23,6 +23,8 @@ appium-pytest-kit-init --framework --root my-project
 | **Page + flow objects** | Scaffold generates `pages/` and `flows/` with base classes ready to extend |
 | **Extension hooks** | Override settings, inject capabilities, run code after driver creation |
 | **CLI scaffold** | One command to generate a full project structure |
+| **Data-driven tests** | Load test cases from YAML/JSON, cross-platform parametrize helpers |
+| **Visual regression** | Screenshot comparison with baseline management and diff images |
 
 ## Quick start
 
@@ -49,3 +51,5 @@ pytest
 - [Fixtures](fixtures.md) — built-in fixtures and lifecycle
 - [Actions Reference](actions.md) — 50+ high-level UI actions
 - [Waits Reference](waits.md) — explicit wait primitives
+- [Data-Driven Testing](data-driven-testing.md) — parametrize from YAML/JSON
+- [Visual Regression](visual-regression.md) — screenshot comparison with baselines

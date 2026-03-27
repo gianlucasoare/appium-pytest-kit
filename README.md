@@ -35,6 +35,8 @@ appium-pytest-kit-init --framework --root my-project --install-extras all
 | **Page + flow objects** | Scaffold generates `pages/` and `flows/` with base classes ready to extend |
 | **Extension hooks** | Override settings, inject capabilities, run code after driver creation |
 | **CLI scaffold** | One command to generate a full project structure |
+| **Data-driven tests** | Load test cases from YAML/JSON, cross-platform parametrize helpers |
+| **Visual regression** | Screenshot comparison with baseline management and diff images |
 
 ---
 
@@ -51,19 +53,21 @@ All required dependencies are **installed automatically** with `pip install appi
 **Optional extras** (install only what you need):
 
 ```bash
-pip install "appium-pytest-kit[yaml]"    # device profile YAML support
+pip install "appium-pytest-kit[yaml]"    # device profile YAML support + data-driven tests
 pip install "appium-pytest-kit[allure]"  # Allure report attachments
 pip install "appium-pytest-kit[retry]"   # pytest-retry for flaky test handling
 pip install "appium-pytest-kit[xdist]"   # pytest-xdist parallel execution
+pip install "appium-pytest-kit[visual]"  # visual regression screenshot comparison
 pip install "appium-pytest-kit[all]"     # all optional extras
 ```
 
 | Extra | Installs | When you need it |
 |---|---|---|
-| `[yaml]` | PyYAML ≥ 6.0 | Named device profiles in `data/devices.yaml` |
+| `[yaml]` | PyYAML ≥ 6.0 | Named device profiles in `data/devices.yaml` + YAML test data files |
 | `[allure]` | allure-pytest ≥ 2.13.0 | Screenshots + page source in Allure reports |
 | `[retry]` | pytest-retry ≥ 0.6.0 | Retry flaky tests while reusing the same Appium session |
 | `[xdist]` | pytest-xdist ≥ 3.6.0 | Run tests in parallel workers safely |
+| `[visual]` | Pillow ≥ 10.0.0 | Visual regression screenshot comparison |
 
 ---
 
@@ -467,6 +471,75 @@ actions.switch_to_native()
 
 ---
 
+## Data-driven tests
+
+Load test cases from YAML or JSON files and run them as parametrized tests:
+
+```yaml
+# data/login_cases.yaml
+- name: valid login
+  username: user@example.com
+  password: Test1234!
+  expected: home
+
+- name: invalid password
+  username: user@example.com
+  password: wrong
+  expected: error
+```
+
+```python
+from appium_pytest_kit import from_file
+
+@from_file("data/login_cases.yaml")
+def test_login(case, login_page):
+    login_page.login(case["username"], case["password"])
+    assert login_page.current_screen() == case["expected"]
+```
+
+Run the same test on both platforms:
+
+```python
+from appium_pytest_kit import cross_platform
+
+@cross_platform()
+def test_login_works(platform, login_page):
+    login_page.login("user", "pass")
+    assert login_page.is_on_home()
+```
+
+See [docs/data-driven-testing.md](docs/data-driven-testing.md) for platform-filtered data, nested sections, and JSON support.
+
+---
+
+## Visual regression
+
+Compare screenshots against baselines to detect unintended UI changes:
+
+```python
+from appium_pytest_kit import assert_screenshot_match
+
+def test_home_screen_looks_correct(driver, request):
+    assert_screenshot_match(
+        driver,
+        test_id=request.node.nodeid,
+        baselines_dir="baselines",
+        artifacts_dir="artifacts",
+        platform="android",
+        threshold=0.01,  # 1% pixel tolerance
+    )
+```
+
+On first run, saves a baseline. On subsequent runs, compares and raises `VisualRegressionError` if the diff exceeds the threshold. Diff images highlight changes in red.
+
+```bash
+pip install "appium-pytest-kit[visual]"
+```
+
+See [docs/visual-regression.md](docs/visual-regression.md) for baseline management, threshold tuning, and update workflows.
+
+---
+
 ## Public API
 
 ```python
@@ -475,10 +548,14 @@ from appium_pytest_kit import (
     AppiumPytestKitError,
     ConfigurationError, DeviceResolutionError, LaunchValidationError,
     WaitTimeoutError, ActionError, DriverCreationError, ApiRequestError,
+    VisualRegressionError,
     DeviceInfo, DriverConfig, MobileActions, Waiter,
     ApiClient, ApiResponse,
+    BaselineManager, ScreenshotDiff,
     Locator,           # type alias: tuple[str, str]
     build_driver_config, create_driver, load_settings, apply_cli_overrides,
+    load_test_data, from_file, cross_platform,
+    compare_screenshots, assert_screenshot_match,
 )
 ```
 
@@ -559,6 +636,8 @@ python -m pytest --collect-only examples/basic/tests -q
 | API testing tutorial (step by step) | [docs/api-testing.md](docs/api-testing.md) |
 | Waits reference | [docs/waits.md](docs/waits.md) |
 | Actions reference | [docs/actions.md](docs/actions.md) |
+| Data-driven testing | [docs/data-driven-testing.md](docs/data-driven-testing.md) |
+| Visual regression | [docs/visual-regression.md](docs/visual-regression.md) |
 | Session modes | [docs/session-modes.md](docs/session-modes.md) |
 | Device resolution | [docs/device-resolution.md](docs/device-resolution.md) |
 | Failure diagnostics + video | [docs/diagnostics.md](docs/diagnostics.md) |

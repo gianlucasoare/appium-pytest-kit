@@ -14,7 +14,9 @@ Exception
     ├── LaunchValidationError     missing required app launch settings
     ├── WaitTimeoutError          explicit wait condition never passed
     ├── ActionError               tap / type / scroll raised WebDriverException
-    └── DriverCreationError       Appium session could not be created
+    ├── DriverCreationError       Appium session could not be created
+    ├── ApiRequestError           HTTP request failed or unexpected status
+    └── VisualRegressionError     screenshot does not match baseline
 ```
 
 ---
@@ -176,6 +178,60 @@ xcrun simctl list    # iOS
 
 ---
 
+## `ApiRequestError`
+
+Raised when an HTTP request fails or returns an unexpected status code.
+
+Carries structured context:
+
+| Attribute | Type | Description |
+|---|---|---|
+| `.method` | `str \| None` | HTTP method (GET, POST, etc.) |
+| `.url` | `str \| None` | Request URL |
+| `.status_code` | `int \| None` | Response status code |
+
+```python
+from appium_pytest_kit import ApiRequestError
+
+try:
+    api.get("/health", expected_status=200)
+except ApiRequestError as exc:
+    print(exc.method)       # "GET"
+    print(exc.url)          # "http://127.0.0.1:8000/health"
+    print(exc.status_code)  # 503
+```
+
+---
+
+## `VisualRegressionError`
+
+Raised when a screenshot does not match its baseline beyond the allowed threshold.
+
+Carries structured context:
+
+| Attribute | Type | Description |
+|---|---|---|
+| `.baseline_path` | `str \| None` | Path to the baseline image |
+| `.actual_path` | `str \| None` | Path to the actual screenshot |
+| `.diff_ratio` | `float \| None` | Ratio of differing pixels (0.0-1.0) |
+| `.threshold` | `float \| None` | Maximum allowed diff ratio |
+
+```python
+from appium_pytest_kit import VisualRegressionError
+
+try:
+    assert_screenshot_match(driver, test_id, baselines_dir, artifacts_dir)
+except VisualRegressionError as exc:
+    print(exc.diff_ratio)      # 0.0342
+    print(exc.threshold)       # 0.01
+    print(exc.baseline_path)   # baselines/android/test_home.png
+    print(exc.actual_path)     # artifacts/screenshots/visual/test_home.png
+```
+
+Requires the `visual` extra: `pip install appium-pytest-kit[visual]`
+
+---
+
 ## Importing errors
 
 All errors are available from the top-level package:
@@ -189,5 +245,7 @@ from appium_pytest_kit import (
     WaitTimeoutError,
     ActionError,
     DriverCreationError,
+    ApiRequestError,
+    VisualRegressionError,
 )
 ```
