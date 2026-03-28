@@ -52,18 +52,24 @@ If any step fails, release is blocked. After release: verify PyPI version, GitHu
 ## Architecture
 
 - **src layout** with `_internal/` for non-public modules: `device_resolver.py`, `diagnostics.py`, `video.py`, `server.py`, `reporting.py`
+- **Public modules**: `actions.py`, `api.py`, `cloud.py`, `driver.py`, `errors.py`, `hooks.py`, `interfaces.py`, `locator_healing.py`, `parametrize.py`, `settings.py`, `soft_assertions.py`, `test_data.py`, `visual.py`, `waits.py`
 - **Stash keys**: `SETTINGS_KEY`, `REPORTER_KEY`, `DRIVER_KEY`, `RECORDER_KEY`, `DEVICE_INFO_KEY`
 - **Settings**: `AppiumPytestKitSettings` (env prefix `APP_`)
 - **Base error**: `AppiumPytestKitError`
+- **Error hierarchy**: `ConfigurationError`, `DeviceResolutionError`, `LaunchValidationError`, `WaitTimeoutError`, `ActionError`, `DriverCreationError`, `ApiRequestError`, `VisualRegressionError`, `SoftAssertionError`
 - **Hook specs class**: `AppiumPytestKitHookSpecs`
 - **Hooks**: `pytest_appium_pytest_kit_configure_settings`, `pytest_appium_pytest_kit_capabilities`, `pytest_appium_pytest_kit_driver_created`
+- **Cloud providers**: `build_cloud_config()` for BrowserStack, Sauce Labs, AWS Device Farm
+- **Locator healing**: `LocatorChain`, `HealingRegistry`, `chain()` shorthand
+- **Soft assertions**: `SoftAssert`, `soft_assertions()` context manager
+- **Test data**: `DataFactory` with seedable randomness, standalone generators
 
 ## Coding Conventions
 
 - Do NOT use `from __future__ import annotations` (Python 3.11+ only); only `interfaces.py` uses it behind `TYPE_CHECKING` guard
 - Import `Mapping`, `Iterable`, `Sequence` from `collections.abc`, not `typing`
 - Use `wrapper=True` (not deprecated `hookwrapper=True`) for `pytest_runtest_makereport`
-- Raise domain-specific errors with context: `WaitTimeoutError`, `ActionError` carry `.locator`, `.timeout`, `.action`
+- Raise domain-specific errors with context: `WaitTimeoutError`, `ActionError` carry `.locator`, `.timeout`, `.action`; `SoftAssertionError` carries `.failures`, `.failure_count`; `ApiRequestError` carries `.method`, `.url`, `.status_code`; `VisualRegressionError` carries `.baseline_path`, `.actual_path`, `.diff_ratio`, `.threshold`
 - Type hints on all public interfaces; no dead code or commented-out blocks
 - Allure integration via soft import, no hard dependency
 

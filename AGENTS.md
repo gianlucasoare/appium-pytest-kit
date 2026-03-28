@@ -39,9 +39,15 @@ After release, verify the published PyPI version, GitHub release notes, and an i
 ## Architecture Notes
 
 - Treat `src/appium_pytest_kit/_internal/` as non-public implementation detail.
+- **Public modules**: `actions.py`, `api.py`, `cloud.py`, `driver.py`, `errors.py`, `hooks.py`, `interfaces.py`, `locator_healing.py`, `parametrize.py`, `settings.py`, `soft_assertions.py`, `test_data.py`, `visual.py`, `waits.py`
 - Prefer safe `pytest.Config.stash` access and typed stash keys over globals.
 - `AppiumPytestKitSettings` is the primary settings surface and uses the `APP_` env prefix.
 - Hook specs live in `AppiumPytestKitHookSpecs`.
+- **Error hierarchy**: `AppiumPytestKitError` → `ConfigurationError`, `DeviceResolutionError`, `LaunchValidationError`, `WaitTimeoutError`, `ActionError`, `DriverCreationError`, `ApiRequestError`, `VisualRegressionError`, `SoftAssertionError`
+- **Cloud providers**: `build_cloud_config()` for BrowserStack, Sauce Labs, AWS Device Farm with env-var auth
+- **Locator healing**: `LocatorChain`, `HealingRegistry`, `chain()` shorthand for fallback locator strategies
+- **Soft assertions**: `SoftAssert` with 10 check methods + `soft_assertions()` context manager
+- **Test data**: `DataFactory` with seedable randomness, standalone generators for emails, phones, passwords
 - Public behavior changes often touch docs under `docs/` and examples under `examples/`.
 
 ## Coding Conventions
@@ -49,7 +55,7 @@ After release, verify the published PyPI version, GitHub release notes, and an i
 - Do not use `from __future__ import annotations`; keep the existing exception only where the codebase already does.
 - Import `Mapping`, `Iterable`, and `Sequence` from `collections.abc`, not `typing`.
 - Use `wrapper=True` for `pytest_runtest_makereport`.
-- Raise domain-specific errors with actionable context instead of generic exceptions.
+- Raise domain-specific errors with actionable context instead of generic exceptions. Errors carry structured attributes: `.locator`, `.timeout`, `.action`, `.failures`, `.method`, `.url`, `.status_code`, `.diff_ratio`, `.threshold` as appropriate.
 - Keep public interfaces typed and deterministic.
 - Keep Allure integration as a soft import, never a hard dependency.
 
