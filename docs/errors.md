@@ -16,7 +16,8 @@ Exception
     ├── ActionError               tap / type / scroll raised WebDriverException
     ├── DriverCreationError       Appium session could not be created
     ├── ApiRequestError           HTTP request failed or unexpected status
-    └── VisualRegressionError     screenshot does not match baseline
+    ├── VisualRegressionError     screenshot does not match baseline
+    └── SoftAssertionError        one or more soft assertions failed
 ```
 
 ---
@@ -232,6 +233,43 @@ Requires the `visual` extra: `pip install appium-pytest-kit[visual]`
 
 ---
 
+## `SoftAssertionError`
+
+Raised when one or more soft assertions fail at checkpoint or context exit.
+
+Carries structured context:
+
+| Attribute | Type | Description |
+|---|---|---|
+| `.failures` | `list[AssertionFailure]` | Individual failure records |
+| `.failure_count` | `int` | Number of failures (via `len(failures)`) |
+
+Each `AssertionFailure` record has:
+
+| Attribute | Type | Description |
+|---|---|---|
+| `.message` | `str` | Human-readable failure description |
+| `.label` | `str \| None` | Optional short tag (e.g. field name) |
+| `.expected` | `object` | Expected value |
+| `.actual` | `object` | Actual value |
+
+```python
+from appium_pytest_kit import SoftAssertionError, soft_assertions
+
+try:
+    with soft_assertions() as sa:
+        sa.check_equal(title, "Home", label="title")
+        sa.check_true(is_visible, label="banner")
+except SoftAssertionError as exc:
+    print(exc.failure_count)    # 2
+    for f in exc.failures:
+        print(f.label, f.message)
+```
+
+See [docs/soft-assertions.md](soft-assertions.md) for full usage guide.
+
+---
+
 ## Importing errors
 
 All errors are available from the top-level package:
@@ -247,5 +285,6 @@ from appium_pytest_kit import (
     DriverCreationError,
     ApiRequestError,
     VisualRegressionError,
+    SoftAssertionError,
 )
 ```

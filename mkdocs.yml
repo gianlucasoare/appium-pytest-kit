@@ -57,6 +57,10 @@ nav:
       - API Testing: api-testing.md
       - Data-Driven Testing: data-driven-testing.md
       - Visual Regression: visual-regression.md
+      - Soft Assertions: soft-assertions.md
+      - Cloud Providers: cloud-providers.md
+      - Locator Healing: locator-healing.md
+      - Test Data Factories: test-data-factories.md
   - Advanced:
       - Device Resolution: device-resolution.md
       - Session Modes: session-modes.md

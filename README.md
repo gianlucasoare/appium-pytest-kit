@@ -37,6 +37,10 @@ appium-pytest-kit-init --framework --root my-project --install-extras all
 | **CLI scaffold** | One command to generate a full project structure |
 | **Data-driven tests** | Load test cases from YAML/JSON, cross-platform parametrize helpers |
 | **Visual regression** | Screenshot comparison with baseline management and diff images |
+| **Soft assertions** | Collect multiple failures in one test — critical for form validation flows |
+| **Cloud device farms** | BrowserStack, Sauce Labs, AWS Device Farm with one config switch |
+| **Locator healing** | Fallback chains + registry — automatic recovery when locators break |
+| **Test data factories** | Unique emails, usernames, passwords per run — xdist-safe, seedable |
 
 ---
 
@@ -548,10 +552,14 @@ from appium_pytest_kit import (
     AppiumPytestKitError,
     ConfigurationError, DeviceResolutionError, LaunchValidationError,
     WaitTimeoutError, ActionError, DriverCreationError, ApiRequestError,
-    VisualRegressionError,
+    VisualRegressionError, SoftAssertionError,
     DeviceInfo, DriverConfig, MobileActions, Waiter,
     ApiClient, ApiResponse,
     BaselineManager, ScreenshotDiff,
+    CloudConfig, build_cloud_config, apply_cloud_config,
+    SoftAssert, AssertionFailure, soft_assertions,
+    LocatorChain, HealingResult, HealingRegistry, chain,
+    DataFactory,
     Locator,           # type alias: tuple[str, str]
     build_driver_config, create_driver, load_settings, apply_cli_overrides,
     load_test_data, from_file, cross_platform,
@@ -638,6 +646,10 @@ python -m pytest --collect-only examples/basic/tests -q
 | Actions reference | [docs/actions.md](docs/actions.md) |
 | Data-driven testing | [docs/data-driven-testing.md](docs/data-driven-testing.md) |
 | Visual regression | [docs/visual-regression.md](docs/visual-regression.md) |
+| Soft assertions | [docs/soft-assertions.md](docs/soft-assertions.md) |
+| Cloud providers | [docs/cloud-providers.md](docs/cloud-providers.md) |
+| Locator healing | [docs/locator-healing.md](docs/locator-healing.md) |
+| Test data factories | [docs/test-data-factories.md](docs/test-data-factories.md) |
 | Session modes | [docs/session-modes.md](docs/session-modes.md) |
 | Device resolution | [docs/device-resolution.md](docs/device-resolution.md) |
 | Failure diagnostics + video | [docs/diagnostics.md](docs/diagnostics.md) |

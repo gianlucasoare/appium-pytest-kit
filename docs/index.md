@@ -25,6 +25,10 @@ appium-pytest-kit-init --framework --root my-project
 | **CLI scaffold** | One command to generate a full project structure |
 | **Data-driven tests** | Load test cases from YAML/JSON, cross-platform parametrize helpers |
 | **Visual regression** | Screenshot comparison with baseline management and diff images |
+| **Soft assertions** | Collect multiple failures in one test — critical for form validation flows |
+| **Cloud device farms** | BrowserStack, Sauce Labs, AWS Device Farm with one config switch |
+| **Locator healing** | Fallback chains + registry — automatic recovery when locators break |
+| **Test data factories** | Unique emails, usernames, passwords per run — xdist-safe, seedable |
 
 ## Quick start
 
@@ -53,3 +57,7 @@ pytest
 - [Waits Reference](waits.md) — explicit wait primitives
 - [Data-Driven Testing](data-driven-testing.md) — parametrize from YAML/JSON
 - [Visual Regression](visual-regression.md) — screenshot comparison with baselines
+- [Soft Assertions](soft-assertions.md) — collect multiple failures per test
+- [Cloud Providers](cloud-providers.md) — BrowserStack, Sauce Labs, AWS Device Farm
+- [Locator Healing](locator-healing.md) — fallback chains and healing registry
+- [Test Data Factories](test-data-factories.md) — unique test data generation
