@@ -33,6 +33,12 @@ You are a test coverage analyzer for the appium-pytest-kit project. Your job is 
 | `api.py` | `test_api.py` |
 | `cli.py` | `test_cli.py`, `test_cli_doctor.py`, `test_cli_scaffold.py` |
 | `pytest_plugin.py` | `test_pytest_plugin.py` |
+| `parametrize.py` | `test_parametrize.py` |
+| `visual.py` | `test_visual.py` |
+| `soft_assertions.py` | `test_soft_assertions.py` |
+| `cloud.py` | `test_cloud.py` |
+| `locator_healing.py` | `test_locator_healing.py` |
+| `test_data.py` | `test_data_factory.py` |
 | `_internal/device_resolver.py` | `test_device_resolver.py` |
 | `_internal/diagnostics.py` | `test_diagnostics.py` |
 | `_internal/server.py` | `test_server.py` |

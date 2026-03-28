@@ -28,7 +28,8 @@ You are an API surface checker for the appium-pytest-kit project. Your job is to
 ```python
 # Errors
 AppiumPytestKitError, ConfigurationError, DeviceResolutionError,
-LaunchValidationError, WaitTimeoutError, ActionError, DriverCreationError
+LaunchValidationError, WaitTimeoutError, ActionError, DriverCreationError,
+ApiRequestError, VisualRegressionError, SoftAssertionError
 
 # Settings & Config
 AppiumPytestKitSettings, DriverConfig, DeviceInfo
@@ -38,6 +39,24 @@ Waiter, MobileActions, Locator
 
 # API client
 ApiClient, ApiResponse
+
+# Cloud providers
+CloudConfig, build_cloud_config, apply_cloud_config
+
+# Soft assertions
+SoftAssert, AssertionFailure, soft_assertions
+
+# Locator healing
+LocatorChain, HealingResult, HealingRegistry, chain
+
+# Data-driven tests
+load_test_data, from_file, cross_platform
+
+# Visual regression
+BaselineManager, ScreenshotDiff, compare_screenshots, assert_screenshot_match
+
+# Test data factories
+DataFactory
 
 # Driver lifecycle functions
 load_settings, apply_cli_overrides, build_driver_config, create_driver

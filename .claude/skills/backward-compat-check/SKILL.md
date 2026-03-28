@@ -32,12 +32,40 @@ description: Verify changes preserve public API and backward compatibility befor
 
 ### Exports (`__init__.py`)
 ```
-ActionError, ApiClient, ApiResponse, AppiumPytestKitError,
-AppiumPytestKitSettings, ConfigurationError, DeviceInfo,
-DeviceResolutionError, DriverConfig, DriverCreationError,
-LaunchValidationError, Locator, MobileActions, WaitTimeoutError,
-Waiter, __version__, apply_cli_overrides, build_driver_config,
-create_driver, load_settings
+# Errors
+ActionError, ApiRequestError, AppiumPytestKitError, ConfigurationError,
+DeviceResolutionError, DriverCreationError, LaunchValidationError,
+SoftAssertionError, VisualRegressionError, WaitTimeoutError
+
+# Settings, config, types
+AppiumPytestKitSettings, DeviceInfo, DriverConfig, Locator, __version__
+
+# Primitives
+MobileActions, Waiter
+
+# API client
+ApiClient, ApiResponse
+
+# Cloud providers
+CloudConfig, build_cloud_config, apply_cloud_config
+
+# Soft assertions
+SoftAssert, AssertionFailure, soft_assertions
+
+# Locator healing
+LocatorChain, HealingResult, HealingRegistry, chain
+
+# Visual regression
+BaselineManager, ScreenshotDiff, compare_screenshots, assert_screenshot_match
+
+# Data-driven tests
+load_test_data, from_file, cross_platform
+
+# Test data factories
+DataFactory
+
+# Driver lifecycle
+load_settings, apply_cli_overrides, build_driver_config, create_driver
 ```
 
 ### Fixtures

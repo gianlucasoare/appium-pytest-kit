@@ -27,6 +27,12 @@ description: Verify and enforce documentation-code alignment across fixtures, ho
    - Session modes → `docs/session-modes.md`
    - API client → `docs/api-testing.md`
    - Page objects → `docs/page-objects.md`
+   - Data-driven tests → `docs/data-driven-testing.md`
+   - Visual regression → `docs/visual-regression.md`
+   - Soft assertions → `docs/soft-assertions.md`
+   - Cloud providers → `docs/cloud-providers.md`
+   - Locator healing → `docs/locator-healing.md`
+   - Test data factories → `docs/test-data-factories.md`
 3. **Check README.md**: verify quick-start examples still work with current API
 4. **Check examples/**: verify example code uses current API (no deprecated patterns)
 5. **Report gaps**: list undocumented or stale entries

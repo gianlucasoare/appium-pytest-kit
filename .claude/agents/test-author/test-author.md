@@ -299,8 +299,18 @@ def my_page(page_factory):
 | `src/appium_pytest_kit/actions.py` | Adding new MobileActions methods |
 | `src/appium_pytest_kit/waits.py` | Adding new Waiter methods |
 | `src/appium_pytest_kit/errors.py` | Adding new error types (read-only usually) |
+| `src/appium_pytest_kit/soft_assertions.py` | Soft assertion check methods |
+| `src/appium_pytest_kit/cloud.py` | Cloud provider adapters |
+| `src/appium_pytest_kit/locator_healing.py` | Locator fallback chains and registry |
+| `src/appium_pytest_kit/test_data.py` | Test data factory and generators |
+| `src/appium_pytest_kit/parametrize.py` | Data-driven test helpers |
+| `src/appium_pytest_kit/visual.py` | Visual regression comparison |
 | `tests/unit/test_actions_expanded2.py` | Unit tests for new actions |
 | `tests/unit/test_waits_expanded2.py` | Unit tests for new waits |
+| `tests/unit/test_soft_assertions.py` | Unit tests for soft assertions |
+| `tests/unit/test_cloud.py` | Unit tests for cloud providers |
+| `tests/unit/test_locator_healing.py` | Unit tests for locator healing |
+| `tests/unit/test_data_factory.py` | Unit tests for test data factories |
 | `examples/my-app/pages/` | Reference page objects |
 | `examples/my-app/conftest.py` | Reference fixtures and hooks |
 

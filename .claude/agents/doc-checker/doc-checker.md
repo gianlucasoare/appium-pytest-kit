@@ -36,6 +36,12 @@ You are a documentation checker for the appium-pytest-kit project. Your job is t
 | `_internal/device_resolver.py` | `docs/device-resolution.md` |
 | `_internal/diagnostics.py` | `docs/diagnostics.md` |
 | `api.py` | `docs/api-testing.md` |
+| `parametrize.py` | `docs/data-driven-testing.md` |
+| `visual.py` | `docs/visual-regression.md` |
+| `soft_assertions.py` | `docs/soft-assertions.md` |
+| `cloud.py` | `docs/cloud-providers.md` |
+| `locator_healing.py` | `docs/locator-healing.md` |
+| `test_data.py` | `docs/test-data-factories.md` |
 
 ## Report Format
 

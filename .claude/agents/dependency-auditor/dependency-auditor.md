@@ -30,7 +30,9 @@ You are a dependency auditor for the appium-pytest-kit project. Your job is to c
 - **[allure]**: allure-pytest
 - **[retry]**: pytest-retry
 - **[xdist]**: pytest-xdist
-- **[dev]**: ruff, pytest-cov
+- **[visual]**: Pillow
+- **[dev]**: ruff, pytest-cov, mypy
+- **[all]**: all of the above optional extras
 
 ## Checks
 
